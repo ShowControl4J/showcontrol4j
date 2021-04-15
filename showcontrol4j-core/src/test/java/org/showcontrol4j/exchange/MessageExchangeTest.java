@@ -1,8 +1,8 @@
 package org.showcontrol4j.exchange;
 
-import static org.junit.Assert.assertEquals;
-
 import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * Tests for the {@link MessageExchange} class.
@@ -13,7 +13,7 @@ public class MessageExchangeTest {
 
   @Test
   public void testBuilder() {
-    String name = "test_namme";
+    String name = "test_name";
     MessageExchange messageExchange = MessageExchange.builder().name(name).build();
     assertEquals(name, messageExchange.getName());
   }
