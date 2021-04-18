@@ -19,7 +19,7 @@ public class ShowCommand {
    * @param syncTimeout milliseconds to wait before starting show loop.
    * @return a {@link SCFJMessage} with the GO show command.
    */
-  public static SCFJMessage GO(Long syncTimeout) {
+  public static SCFJMessage GO(final Long syncTimeout) {
     return SCFJMessage.builder()
         .instruction(Instruction.GO)
         .startTime(System.currentTimeMillis() + (syncTimeout != null ? syncTimeout : 0L))
@@ -35,7 +35,7 @@ public class ShowCommand {
    * @param syncTimeout milliseconds to wait before starting show loop.
    * @return a {@link SCFJMessage} String with the IDLE show command.
    */
-  public static SCFJMessage IDLE(Long syncTimeout) {
+  public static SCFJMessage IDLE(final Long syncTimeout) {
     return SCFJMessage.builder()
         .instruction(Instruction.IDLE)
         .startTime(System.currentTimeMillis() + (syncTimeout != null ? syncTimeout : 0L))
