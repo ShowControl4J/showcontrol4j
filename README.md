@@ -3,9 +3,9 @@ ShowControl4J is an open sourced, mavenized Java library for controlling show el
 
 <p align="center">
   
-[![Build Status](https://travis-ci.com/ShowControl4J/showcontrol4j.svg?branch=main)](https://travis-ci.com/ShowControl4J/showcontrol4j)
+  [![Build Status](https://travis-ci.com/ShowControl4J/showcontrol4j.svg?branch=main)](https://travis-ci.com/ShowControl4J/showcontrol4j)
 
-![GitHub](https://img.shields.io/github/license/showcontrol4j/showcontrol4j?style=plastic)
+  ![GitHub](https://img.shields.io/github/license/showcontrol4j/showcontrol4j?style=plastic)
 
 </p>
 
