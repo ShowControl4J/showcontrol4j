@@ -1,6 +1,5 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/showcontrol4j/showcontrol4j/SCFJ-4/showcontrol4j_banner.png?sanitize=true"
-        height="130">
+    <img src="https://github.com/ShowControl4J/showcontrol4j/blob/main/ShowControl4J_Banner.png?raw=true&sanitize=true">
 </p>
 
 <p align="center">
