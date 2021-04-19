@@ -2,6 +2,7 @@ package org.showcontrol4j.trigger.keyboard;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.exchange.MessageExchange;
@@ -17,9 +18,11 @@ import java.util.Scanner;
  */
 @Getter
 @Setter
+@ToString(onlyExplicitlyIncluded = true, callSuper = true)
 @Slf4j
 public class KeyboardShowTrigger extends ShowTrigger {
 
+    @ToString.Include
     private final String triggerKey;
     private Scanner scanner;
 

@@ -3,6 +3,7 @@ package org.showcontrol4j.trigger;
 import com.rabbitmq.client.Channel;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.exchange.MessageExchange;
 import org.showcontrol4j.message.ShowCommand;
@@ -11,19 +12,24 @@ import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Serves as the parent class for a ShowTrigger. The ShowTrigger must define a triggerElements method
- * at the time of instantiation.
+ * Serves as the parent class for all Show Triggers. When creating a child class, the {@link ShowTrigger#startListener()}
+ * method must be implemented to describe how the trigger will send messages to the message broker to start/ stop a Show
+ * Element.
  *
  * @author James Hare
  */
 @Getter
 @Setter
+@ToString(onlyExplicitlyIncluded = true)
 public abstract class ShowTrigger {
 
+    @ToString.Include
     protected final String name;
+    @ToString.Include
     protected final Long id;
     private final MessageExchange messageExchange;
     private final BrokerConnectionFactory brokerConnectionFactory;
+    @ToString.Include
     private final Long syncTimeout;
     private Channel channel;
 

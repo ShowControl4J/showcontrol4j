@@ -124,6 +124,16 @@ public class KeyboardShowTriggerTest {
         verify(mockChannel, atLeast(1)).basicPublish(eq("test"), eq(""), eq(null), any());
     }
 
+    @Test
+    public void testToString() throws Exception {
+        final KeyboardShowTrigger keyboardShowTrigger = new KeyboardShowTrigger(triggerKey, name, id, syncTimeout,
+                mockMessageExchange, mockBrokerConnectionFactory);
+
+        final String expected = "KeyboardShowTrigger(super=ShowTrigger(name=Test Trigger, id=123456, syncTimeout=5000)," +
+                " triggerKey=a)";
+        assertEquals(expected, keyboardShowTrigger.toString());
+    }
+
     //------------------------------------ HELPER METHODS ------------------------------------//
 
     private void setupMockRules() throws Exception {
