@@ -11,5 +11,3 @@ ShowControl4J is an open sourced, mavenized Java library for controlling show el
 James Hare
 
 LinkedIn: https://www.linkedin.com/in/jameshareuk
-
-Email: showcontrol4j@gmail.com
