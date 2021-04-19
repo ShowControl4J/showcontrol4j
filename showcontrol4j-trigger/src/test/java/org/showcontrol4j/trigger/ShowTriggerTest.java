@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
  */
 public class ShowTriggerTest {
 
-    private final String name = "TEST TRIGGER";
+    private final String name = "Test Trigger Name";
     private final Long id = 123456L;
     private final Long syncTimeout = 5000L;
 
@@ -118,6 +118,19 @@ public class ShowTriggerTest {
 
         showTrigger.sendStopMessage();
         verify(mockChannel, times(1)).basicPublish(eq("test"), eq(""), eq(null), any());
+    }
+
+    @Test
+    public void testToString() throws Exception {
+        final ShowTrigger showTrigger = new ShowTrigger(name, id, syncTimeout, mockMessageExchange, mockBrokerConnectionFactory) {
+            @Override
+            protected void startListener() {
+                // do nothing
+            }
+        };
+
+        final String expected = "ShowTrigger(name=Test Trigger Name, id=123456, syncTimeout=5000)";
+        assertEquals(expected, showTrigger.toString());
     }
 
     //------------------------------------ HELPER METHODS ------------------------------------//
