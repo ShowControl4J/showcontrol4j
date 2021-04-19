@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/badges/shields/master/readme-logo.svg?sanitize=true"
+    <img src="https://raw.githubusercontent.com/showcontrol4j/showcontrol4j/main/showcontrol4j_banner.png?sanitize=true"
         height="130">
 </p>
 
