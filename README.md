@@ -5,6 +5,8 @@ ShowControl4J is an open sourced, mavenized Java library for controlling show el
 
 ![GitHub](https://img.shields.io/github/license/showcontrol4j/showcontrol4j)
 
+![Discord](https://img.shields.io/discord/833746556481568798)
+
 # Author
 James Hare
 
