@@ -1,12 +1,21 @@
-# ShowControl4J
-ShowControl4J is an open sourced, mavenized Java library for controlling show elements with a variety of microcontrollers.
+<p align="center">
+    <img src="https://github.com/ShowControl4J/showcontrol4j/blob/main/ShowControl4J_Banner.png?raw=true&sanitize=true">
+</p>
 
-[![Build Status](https://travis-ci.com/ShowControl4J/showcontrol4j.svg?branch=main)](https://travis-ci.com/ShowControl4J/showcontrol4j)
+<p align="center">
+    <a href="https://travis-ci.com/ShowControl4J/showcontrol4j">
+        <img src="https://travis-ci.com/ShowControl4J/showcontrol4j.svg?branch=main" alt="build status"></a>
+  <a href="https://github.com/ShowControl4J/showcontrol4j/blob/main/LICENSE">
+        <img src="https://img.shields.io/github/license/showcontrol4j/showcontrol4j" alt="license info"></a>
+    <a href="https://discord.gg/D9FBxsW8Gq">
+        <img src="https://img.shields.io/discord/833746556481568798?logo=discord" alt="chat on Discord"></a>
+</p>
 
+ShowControl4J is an open sourced Java library which provides a mechanism to connect Show Elements (LEDs, Speakers, Servos, Motors, etc.) and Show Triggers (Push Buttons, Motion Detectors, RFID tags, IO Keyboards, etc.) to group together visual and sound effects in a Themed Attraction or Show.
+
+A prime example would be setting off a number of show effects running on seperate systems/ microcontrollers in sequence with each other as a guest passes by in a ride vehicle on a typical theme park dark ride.
 
 # Author
 James Hare
-
-Email: harejamesm@gmail.com
 
 LinkedIn: https://www.linkedin.com/in/jameshareuk
