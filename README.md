@@ -11,7 +11,9 @@
         <img src="https://img.shields.io/discord/833746556481568798?logo=discord" alt="chat on Discord"></a>
 </p>
 
-ShowControl4J is an open sourced, mavenized Java library for controlling show elements with a variety of microcontrollers.
+ShowControl4J is an open sourced Java library which provides a mechanism to connect Show Elements (LEDs, Speakers, Servos, Motors, etc.) and Show Triggers (Push Buttons, Motion Detectors, RFID tags, IO Keyboards, etc.) to group together visual and sound effects in a Themed Attraction or Show.
+
+A prime example would be setting off a number of show effects running on seperate systems/ microcontrollers in sequence with each other as a guest passes by in a ride vehicle on a typical theme park dark ride.
 
 # Author
 James Hare
