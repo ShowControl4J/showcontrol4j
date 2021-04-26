@@ -15,32 +15,38 @@ import static org.junit.Assert.assertEquals;
  */
 public class SCFJMessageTest {
 
-  @Test
-  public void testBuilder() {
-    final long testTime = 1234567891234L;
-    SCFJMessage scfjMessage = SCFJMessage.builder().instruction(Instruction.GO).startTime(testTime).build();
-    assertThat(scfjMessage, instanceOf(SCFJMessage.class));
-    assertEquals(Instruction.GO, scfjMessage.getInstruction());
-    assertEquals(testTime, scfjMessage.getStartTime());
-  }
+    @Test
+    public void testBuilder() {
+        final long testTime = 1234567891234L;
+        final SCFJMessage scfjMessage = SCFJMessage.builder().instruction(Instruction.GO).startTime(testTime).build();
+        assertThat(scfjMessage, instanceOf(SCFJMessage.class));
+        assertEquals(Instruction.GO, scfjMessage.getInstruction());
+        assertEquals(testTime, scfjMessage.getStartTime());
+    }
 
-  @Test
-  public void testConstructor_nullStartTime() {
-    SCFJMessage scfjMessage = SCFJMessage.builder().build();
-    assertThat(scfjMessage.getStartTime(), instanceOf(Long.class));
-    assertEquals(0L, scfjMessage.getStartTime());
-  }
+    @Test
+    public void testConstructor_nullStartTime() {
+        final SCFJMessage scfjMessage = SCFJMessage.builder().build();
+        assertThat(scfjMessage.getStartTime(), instanceOf(Long.class));
+        assertEquals(0L, scfjMessage.getStartTime());
+    }
 
-  @Test
-  public void testSerialization() throws IOException {
-    final long testTime = 1234567891234L;
-    SCFJMessage scfjMessage = SCFJMessage.builder().instruction(Instruction.GO).startTime(testTime).build();
-    final byte[] serialized = scfjMessage.serialize();
-    final SCFJMessage deserialized = SCFJMessage.deserialize(serialized);
+    @Test
+    public void testSerialization() throws IOException {
+        final long testTime = 1234567891234L;
+        final SCFJMessage scfjMessage = SCFJMessage.builder().instruction(Instruction.GO).startTime(testTime).build();
+        final byte[] serialized = scfjMessage.serialize();
+        final SCFJMessage deserialized = SCFJMessage.deserialize(serialized);
 
-    assertThat(deserialized, instanceOf(SCFJMessage.class));
-    assertEquals(Instruction.GO, deserialized.getInstruction());
-    assertEquals(testTime, deserialized.getStartTime());
-  }
+        assertThat(deserialized, instanceOf(SCFJMessage.class));
+        assertEquals(Instruction.GO, deserialized.getInstruction());
+        assertEquals(testTime, deserialized.getStartTime());
+    }
+
+    @Test
+    public void testToString() throws IOException {
+        final SCFJMessage scfjMessage = SCFJMessage.builder().instruction(Instruction.GO).startTime(1234567891234L).build();
+        assertEquals("SCFJMessage(instruction=GO, startTime=1234567891234)", scfjMessage.toString());
+    }
 
 }

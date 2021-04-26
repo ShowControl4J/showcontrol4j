@@ -44,11 +44,16 @@ public abstract class ShowElement {
         this.messageExchange = messageExchange;
         this.brokerConnectionFactory = brokerConnectionFactory;
         executor = Executors.newFixedThreadPool(5);
+    }
+
+    public void init() {
         try {
             registerShowElement();
         } catch (final IOException | TimeoutException e) {
-            log.error("An error occurred while registering the show element={}. {}", toString(), e.getStackTrace());
+            log.error("An error occurred while registering the Show Element={}. {}", this.toString(), e.getStackTrace());
         }
+        log.info("Initialized Show Element={}", this.toString());
+        handleMessage(SCFJMessage.builder().instruction(Instruction.IDLE).build());
     }
 
     private void registerShowElement() throws IOException, TimeoutException {
@@ -70,9 +75,9 @@ public abstract class ShowElement {
     protected void handleMessage(final SCFJMessage message) {
         while (message.getStartTime() > System.currentTimeMillis()) {
             try {
-                pause();
+                pause(100);
             } catch (final InterruptedException e) {
-                log.error("Sleeping was interrupted while handling message on Show Element={}. {}", toString(), e.getStackTrace());
+                log.error("Sleeping was interrupted while handling message on Show Element={}. {}", this.toString(), e.getStackTrace());
             }
         }
         if (runningFuture != null) {
@@ -82,47 +87,52 @@ public abstract class ShowElement {
     }
 
     private void analyzeMessage(final SCFJMessage message) {
-        if (message.getInstruction() == Instruction.STOP) {
-            runStop();
-        } else if (message.getInstruction() == Instruction.GO) {
+        if (message.getInstruction() == Instruction.GO) {
             runShowLoop();
         } else if (message.getInstruction() == Instruction.IDLE) {
             runIdleLoop();
+        } else if (message.getInstruction() == Instruction.SHUTDOWN) {
+            runShutdown();
         }
     }
 
     private void runShowLoop() {
+        log.info("Starting show loop for Show Element={}", this.toString());
         try {
             showSequence();
             runIdleLoop();
         } catch (final InterruptedException e) {
-            log.trace("Thread is complete because a new Show Command was received for Show Element={}", toString());
+            log.trace("Thread is complete because a new Show Command was received for Show Element={}", this.toString());
         }
     }
 
     private void runIdleLoop() {
+        log.info("Starting idle loop for Show Element={}", this.toString());
         try {
             while (true) {
                 idleLoop();
             }
         } catch (final InterruptedException e) {
-            log.trace("Thread is complete because a new Show Command was received for Show Element={}", toString());
+            log.trace("Thread is complete because a new Show Command was received for Show Element={}", this.toString());
         }
     }
 
-    private void runStop() {
+    private void runShutdown() {
         runningFuture = null;
         executor.shutdownNow();
         shutdownProcedure();
+        log.info("Shutdown was completed for Show Element={}", this.toString());
+        System.exit(0);
     }
 
     /**
      * Pauses a thread for a tenth of a second.
      *
+     * @param milliseconds the time to sleep in milliseconds
      * @throws InterruptedException
      */
-    protected final void pause() throws InterruptedException {
-        TimeUnit.MILLISECONDS.sleep(100);
+    protected final void pause(final long milliseconds) throws InterruptedException {
+        TimeUnit.MILLISECONDS.sleep(milliseconds);
     }
 
     private class MessageTask implements Runnable {

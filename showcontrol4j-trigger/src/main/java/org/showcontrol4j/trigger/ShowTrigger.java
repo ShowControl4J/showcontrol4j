@@ -13,7 +13,7 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * Serves as the parent class for all Show Triggers. When creating a child class, the {@link ShowTrigger#startListener()}
- * method must be implemented to describe how the trigger will send messages to the message broker to start/ stop a Show
+ * method must be implemented to describe how the trigger will send messages to the message broker to start/ shutdown a Show
  * Element.
  *
  * @author James Hare
@@ -67,7 +67,7 @@ public abstract class ShowTrigger {
                 ShowCommand.IDLE(syncTimeout != null ? syncTimeout : 0L).serialize());
     }
 
-    protected void sendStopMessage() throws IOException {
-        channel.basicPublish(messageExchange.getName(), "", null, ShowCommand.STOP().serialize());
+    protected void sendShutdownMessage() throws IOException {
+        channel.basicPublish(messageExchange.getName(), "", null, ShowCommand.SHUTDOWN().serialize());
     }
 }
