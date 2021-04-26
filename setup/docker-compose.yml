@@ -1,0 +1,19 @@
+version: "3.2"
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: 'sc4j-message-broker'
+    ports:
+      - 5672:5672
+      - 15672:15672
+    expose:
+      - 5672
+    volumes:
+      - .config/rabbitmq/rabbitmq-isolated.conf:/etc/rabbitmq/rabbitmq.config
+      - ~/.showcontrol4j/.docker/rabbitmq/data/:/var/lib/rabbitmq/
+      - ~/.showcontrol4j/.docker/rabbitmq/log/:/var/log/rabbitmq
+    networks:
+      - showcontrol4j_network
+networks:
+  showcontrol4j_network:
+    driver: bridge

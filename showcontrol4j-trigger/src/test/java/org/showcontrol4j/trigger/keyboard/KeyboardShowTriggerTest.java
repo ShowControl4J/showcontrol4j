@@ -6,7 +6,9 @@ import com.rabbitmq.client.impl.AMQImpl;
 import org.hamcrest.CoreMatchers;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
@@ -47,6 +49,8 @@ public class KeyboardShowTriggerTest {
     private AMQImpl.Exchange.DeclareOk mockExchangeDeclareOk;
     @Mock
     private AMQImpl.Queue.DeclareOk mockQueueDeclareOk;
+    @Rule
+    public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
     @Before
     public void init() throws Exception {
@@ -93,22 +97,6 @@ public class KeyboardShowTriggerTest {
     }
 
     @Test
-    public void testStartListener_stopMessage() throws Exception {
-        final KeyboardShowTrigger keyboardShowTrigger = new KeyboardShowTrigger(triggerKey, name, id, syncTimeout,
-                mockMessageExchange, mockBrokerConnectionFactory);
-        final Scanner mockScanner = mock(Scanner.class);
-        when(mockScanner.next()).thenReturn("STOP");
-
-        final Field scannerField = keyboardShowTrigger.getClass().getDeclaredField("scanner");
-        scannerField.setAccessible(true);
-        scannerField.set(keyboardShowTrigger, mockScanner);
-
-        executor.submit(new TestTask(keyboardShowTrigger));
-        Thread.sleep(1000);
-        verify(mockChannel, atLeast(1)).basicPublish(eq("test"), eq(""), eq(null), any());
-    }
-
-    @Test
     public void testStartListener_idleMessage() throws Exception {
         final KeyboardShowTrigger keyboardShowTrigger = new KeyboardShowTrigger(triggerKey, name, id, syncTimeout,
                 mockMessageExchange, mockBrokerConnectionFactory);
@@ -122,6 +110,38 @@ public class KeyboardShowTriggerTest {
         executor.submit(new TestTask(keyboardShowTrigger));
         Thread.sleep(500);
         verify(mockChannel, atLeast(1)).basicPublish(eq("test"), eq(""), eq(null), any());
+    }
+
+    @Test
+    public void testStartListener_shutdownMessage() throws Exception {
+        final KeyboardShowTrigger keyboardShowTrigger = new KeyboardShowTrigger(triggerKey, name, id, syncTimeout,
+                mockMessageExchange, mockBrokerConnectionFactory);
+        final Scanner mockScanner = mock(Scanner.class);
+        when(mockScanner.next()).thenReturn("SHUTDOWN");
+
+        final Field scannerField = keyboardShowTrigger.getClass().getDeclaredField("scanner");
+        scannerField.setAccessible(true);
+        scannerField.set(keyboardShowTrigger, mockScanner);
+
+        executor.submit(new TestTask(keyboardShowTrigger));
+        Thread.sleep(1000);
+        verify(mockChannel, atLeast(1)).basicPublish(eq("test"), eq(""), eq(null), any());
+    }
+
+    @Test
+    public void testStartListener_exit() throws Exception {
+        final KeyboardShowTrigger keyboardShowTrigger = new KeyboardShowTrigger(triggerKey, name, id, syncTimeout,
+                mockMessageExchange, mockBrokerConnectionFactory);
+        final Scanner mockScanner = mock(Scanner.class);
+        when(mockScanner.next()).thenReturn("EXIT");
+
+        final Field scannerField = keyboardShowTrigger.getClass().getDeclaredField("scanner");
+        scannerField.setAccessible(true);
+        scannerField.set(keyboardShowTrigger, mockScanner);
+
+        exit.expectSystemExitWithStatus(0);
+        executor.submit(new TestTask(keyboardShowTrigger));
+        Thread.sleep(1000); // pause to give the system a chance to exit
     }
 
     @Test

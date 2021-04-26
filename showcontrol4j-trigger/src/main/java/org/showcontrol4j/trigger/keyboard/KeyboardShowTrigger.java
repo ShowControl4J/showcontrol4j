@@ -35,25 +35,25 @@ public class KeyboardShowTrigger extends ShowTrigger {
 
     @Override
     public void startListener() {
+        log.info("Starting listener for Show Trigger={}", this.toString());
         while (true) {
             try {
                 final String entry = scanner.next();
                 if (entry.equalsIgnoreCase(triggerKey)) {
+                    log.info("Trigger key has been pressed. Sending the GO Instruction to all listening Show Elements.");
                     sendGoMessage();
-                } else if (entry.equalsIgnoreCase("STOP")) {
-                    sendStopMessage();
                 } else if (entry.equalsIgnoreCase("IDLE")) {
+                    log.info("IDLE has been pressed. Sending the IDLE Instruction to all listening Show Elements.");
                     sendIdleMessage();
+                } else if (entry.equalsIgnoreCase("SHUTDOWN")) {
+                    log.info("SHUTDOWN has been pressed. Sending the SHUTDOWN Instruction to all listening Show Elements.");
+                    sendShutdownMessage();
+                } else if (entry.equalsIgnoreCase("EXIT")) {
+                    log.info("EXIT has been pressed. Shutting down this Show Trigger={}", this.toString());
+                    System.exit(0);
                 }
             } catch (final IOException e) {
-                log.error("An exception occurred while running Keyboard Show Trigger {}: {}",
-                        this.toString(), e);
-                try {
-                    sendStopMessage();
-                } catch (final Exception ex) {
-                    log.error("An exception occurred while attempting to stop Keyboard Show Trigger {}: {}",
-                            this.toString(), ex);
-                }
+                log.error("An exception occurred while running Show Trigger={}: {}", this.toString(), e);
             }
         }
     }

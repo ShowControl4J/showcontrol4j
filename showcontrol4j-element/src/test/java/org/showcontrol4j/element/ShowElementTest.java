@@ -7,13 +7,16 @@ import junit.framework.TestCase;
 import org.hamcrest.CoreMatchers;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.exchange.MessageExchange;
 import org.showcontrol4j.message.Instruction;
 import org.showcontrol4j.message.SCFJMessage;
+import org.showcontrol4j.message.ShowCommand;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -39,9 +42,9 @@ public class ShowElementTest {
     private final String testElementName = "Test Element Name";
     private final Long testElementId = 123456L;
     private ExecutorService executor;
-    final SCFJMessage testIdleSCFJMessage = SCFJMessage.builder().instruction(Instruction.IDLE).build();
     final SCFJMessage testGoSCFJMessage = SCFJMessage.builder().instruction(Instruction.GO).build();
-    final SCFJMessage testStopSCFJMessage = SCFJMessage.builder().instruction(Instruction.STOP).build();
+    final SCFJMessage testIdleSCFJMessage = SCFJMessage.builder().instruction(Instruction.IDLE).build();
+    final SCFJMessage testShutdownSCFJMessage = SCFJMessage.builder().instruction(Instruction.SHUTDOWN).build();
 
     @Mock
     private MessageExchange mockMessageExchange;
@@ -57,6 +60,8 @@ public class ShowElementTest {
     private AMQImpl.Queue.BindOk mockBindOk;
     @Mock
     private AMQImpl.Queue.DeclareOk mockQueueDeclareOk;
+    @Rule
+    public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
     @Before
     public void init() {
@@ -122,42 +127,15 @@ public class ShowElementTest {
             }
         };
 
+        showElement.init();
+
         final long timeStampOne = System.currentTimeMillis();
-
-        showElement.pause();
-
+        showElement.pause(100);
         final long timeStampTwo = System.currentTimeMillis();
         final long totalPaused = timeStampTwo - timeStampOne;
 
         TestCase.assertTrue(totalPaused > 0);
         TestCase.assertTrue(totalPaused < 200);
-    }
-
-    @Test
-    public void testToString() throws Exception {
-        setupMockRules();
-        final String testMessageExchangeName = "Test Message Exchange Name";
-        when(mockMessageExchange.getName()).thenReturn(testMessageExchangeName);
-
-        final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
-            @Override
-            public void showSequence() throws InterruptedException {
-                // do nothing
-            }
-
-            @Override
-            public void idleLoop() throws InterruptedException {
-                // do nothing
-            }
-
-            @Override
-            public void shutdownProcedure() {
-                // do nothing
-            }
-        };
-
-        final String expected = "ShowElement(name=Test Element Name, id=123456)";
-        assertEquals(expected, showElement.toString());
     }
 
     @Test
@@ -184,6 +162,8 @@ public class ShowElementTest {
             }
         };
 
+        showElement.init();
+
         executor.submit(new TestTask(showElement, testGoSCFJMessage));
         TimeUnit.MILLISECONDS.sleep(1000);
 
@@ -196,7 +176,6 @@ public class ShowElementTest {
     @Test
     public void testHandleMessage_goMessageTwoMessages() throws Exception {
         setupMockRules();
-
         final int[] showSequenceCounter = {0};
 
         final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
@@ -218,6 +197,8 @@ public class ShowElementTest {
             }
         };
 
+        showElement.init();
+
         executor.submit(new TestTask(showElement, testGoSCFJMessage));
         TimeUnit.MILLISECONDS.sleep(1000);
 
@@ -234,12 +215,8 @@ public class ShowElementTest {
     @Test
     public void testHandleMessage_goMessageWithStartTime() throws Exception {
         setupMockRules();
-
         final boolean[] ranShowSequence = {false};
-        final SCFJMessage testGoSCFJMessageWithStartTime = SCFJMessage.builder()
-                .instruction(Instruction.GO)
-                .startTime(System.currentTimeMillis() + 5000L)
-                .build();
+        final SCFJMessage testGoSCFJMessageWithStartTime = ShowCommand.GO(5000L);
 
         final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
             @Override
@@ -258,6 +235,8 @@ public class ShowElementTest {
             }
         };
 
+        showElement.init();
+
         executor.submit(new TestTask(showElement, testGoSCFJMessageWithStartTime));
         TimeUnit.MILLISECONDS.sleep(1000);
         assertFalse(ranShowSequence[0]);
@@ -270,7 +249,6 @@ public class ShowElementTest {
     @Test
     public void testHandleMessage_idleMessage() throws Exception {
         setupMockRules();
-
         final boolean[] ranIdleLoop = {false};
 
         final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
@@ -289,6 +267,8 @@ public class ShowElementTest {
                 // do nothing
             }
         };
+
+        showElement.init();
 
         executor.submit(new TestTask(showElement, testIdleSCFJMessage));
         TimeUnit.MILLISECONDS.sleep(1000);
@@ -299,45 +279,8 @@ public class ShowElementTest {
     }
 
     @Test
-    public void testHandleMessage_idleMessageWithStartTime() throws Exception {
+    public void testHandleMessage_shutdownMessage() throws Exception {
         setupMockRules();
-
-        final boolean[] ranIdleLoop = {false};
-        final SCFJMessage testIdleSCFJMessageWithStartTime = SCFJMessage.builder()
-                .instruction(Instruction.IDLE)
-                .startTime(System.currentTimeMillis() + 5000L)
-                .build();
-
-        final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
-            @Override
-            public void showSequence() throws InterruptedException {
-                // do nothing
-            }
-
-            @Override
-            public void idleLoop() throws InterruptedException {
-                ranIdleLoop[0] = true;
-            }
-
-            @Override
-            public void shutdownProcedure() {
-                // do nothing
-            }
-        };
-
-        executor.submit(new TestTask(showElement, testIdleSCFJMessageWithStartTime));
-        TimeUnit.MILLISECONDS.sleep(1000);
-        assertFalse(ranIdleLoop[0]);
-        TimeUnit.MILLISECONDS.sleep(5000); // wait for start time
-        assertTrue(ranIdleLoop[0]);
-
-        shutdownExecutorOnShowElementBase(showElement);
-    }
-
-    @Test
-    public void testHandleMessage_stopMessage() throws Exception {
-        setupMockRules();
-
         final boolean[] ranShutdownProcedure = {false};
 
         final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
@@ -357,7 +300,10 @@ public class ShowElementTest {
             }
         };
 
-        executor.submit(new TestTask(showElement, testStopSCFJMessage));
+        showElement.init();
+
+        exit.expectSystemExitWithStatus(0);
+        executor.submit(new TestTask(showElement, testShutdownSCFJMessage));
         TimeUnit.MILLISECONDS.sleep(1000);
 
         assertTrue(ranShutdownProcedure[0]);
@@ -366,14 +312,8 @@ public class ShowElementTest {
     }
 
     @Test
-    public void testHandleMessage_stopMessageWithStartTime() throws Exception {
+    public void testToString() throws Exception {
         setupMockRules();
-
-        final boolean[] ranShutdownProcedure = {false};
-        final SCFJMessage testStopSCFJMessageWithStartTime = SCFJMessage.builder()
-                .instruction(Instruction.STOP)
-                .startTime(System.currentTimeMillis() + 5000L)
-                .build();
 
         final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
             @Override
@@ -388,17 +328,12 @@ public class ShowElementTest {
 
             @Override
             public void shutdownProcedure() {
-                ranShutdownProcedure[0] = true;
+                // do nothing
             }
         };
 
-        executor.submit(new TestTask(showElement, testStopSCFJMessageWithStartTime));
-        TimeUnit.MILLISECONDS.sleep(1000);
-        assertFalse(ranShutdownProcedure[0]);
-        TimeUnit.MILLISECONDS.sleep(5000); // wait for start time
-        assertTrue(ranShutdownProcedure[0]);
-
-        shutdownExecutorOnShowElementBase(showElement);
+        final String expected = "ShowElement(name=Test Element Name, id=123456)";
+        assertEquals(expected, showElement.toString());
     }
 
     //------------------------------------ HELPER METHODS ------------------------------------//

@@ -1,12 +1,11 @@
 package org.showcontrol4j.element.raspberrypi;
 
 import com.pi4j.io.gpio.*;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.element.ShowElement;
 import org.showcontrol4j.exchange.MessageExchange;
-import org.showcontrol4j.message.Instruction;
-import org.showcontrol4j.message.SCFJMessage;
 
 import java.util.concurrent.TimeUnit;
 
@@ -16,9 +15,11 @@ import java.util.concurrent.TimeUnit;
  *
  * @author James Hare
  */
+@ToString(onlyExplicitlyIncluded = true, callSuper = true)
 @Slf4j
 public abstract class GeneralPurposeIOShowElement extends ShowElement {
 
+    @ToString.Include
     private final GpioPinDigitalOutput pinOutput;
     private final GpioController gpioController;
 
@@ -28,7 +29,6 @@ public abstract class GeneralPurposeIOShowElement extends ShowElement {
         gpioController = GpioFactory.getInstance();
         pinOutput = gpioController.provisionDigitalOutputPin(pin, name, PinState.LOW);
         pinOutput.setShutdownOptions(true, PinState.LOW);
-        handleMessage(SCFJMessage.builder().instruction(Instruction.IDLE).build());
     }
 
     /**

@@ -108,7 +108,7 @@ public class ShowTriggerTest {
     }
 
     @Test
-    public void testSendStopMessage() throws Exception {
+    public void testSendShutdownMessage() throws Exception {
         final ShowTrigger showTrigger = new ShowTrigger(name, id, syncTimeout, mockMessageExchange, mockBrokerConnectionFactory) {
             @Override
             protected void startListener() {
@@ -116,7 +116,7 @@ public class ShowTriggerTest {
             }
         };
 
-        showTrigger.sendStopMessage();
+        showTrigger.sendShutdownMessage();
         verify(mockChannel, times(1)).basicPublish(eq("test"), eq(""), eq(null), any());
     }
 
