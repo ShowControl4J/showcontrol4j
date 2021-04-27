@@ -6,7 +6,7 @@
 
     <groupId>org.showcontrol4j</groupId>
     <artifactId>showcontrol4j</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>ShowControl4J</name>
     <description>A Java library for controlling show elements with a variety of microcontrollers</description>
