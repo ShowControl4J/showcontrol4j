@@ -10,6 +10,10 @@
     <a href="https://discord.gg/D9FBxsW8Gq">
         <img src="https://img.shields.io/discord/833746556481568798?logo=discord" alt="chat on Discord"></a>
 </p>
+<p align="center">
+    <a href="https://search.maven.org/search?q=g:org.showcontrol4j">
+        <img src="https://img.shields.io/maven-central/v/org.showcontrol4j/showcontrol4j" alt="latest release"></a>
+</p>
 
 ShowControl4J is an open sourced Java library which provides a mechanism to connect Show Elements (LEDs, Speakers, Servos, Motors, etc.) and Show Triggers (Push Buttons, Motion Detectors, RFID tags, IO Keyboards, etc.) to group together visual and sound effects in a Themed Attraction or Show.
 
