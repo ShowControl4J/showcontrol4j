@@ -19,3 +19,6 @@ A prime example would be setting off a number of show effects running on seperat
 James Hare
 
 LinkedIn: https://www.linkedin.com/in/jameshareuk
+
+# Usage
+Head on over to the ShowControl4J Medium Publication to read more about the project and learn how to setup and use the libraries. [https://medium.com/showcontrol4j](https://medium.com/showcontrol4j)
