@@ -26,3 +26,34 @@ LinkedIn: https://www.linkedin.com/in/jameshareuk
 
 # Usage
 Head on over to the ShowControl4J Medium Publication to read more about the project and learn how to setup and use the libraries. [https://medium.com/showcontrol4j](https://medium.com/showcontrol4j)
+
+# Javadocs
+<p align="center">
+  <table style="width:100%">
+    <tr>
+      <th>Module</th>
+      <th>Link</th>
+    </tr>
+    <tr>
+      <td>showcontrol4j-core</td>
+      <td>
+          <a href="https://javadoc.io/doc/org.showcontrol4j/showcontrol4j-core">
+          <img src="https://javadoc.io/badge2/org.showcontrol4j/showcontrol4j-core/javadoc.svg" alt="showcontrol4j-core javadoc"></a>
+      </td>
+    </tr>
+    <tr>
+      <td>showcontrol4j-element</td>
+      <td>
+          <a href="https://javadoc.io/doc/org.showcontrol4j/showcontrol4j-element">
+          <img src="https://javadoc.io/badge2/org.showcontrol4j/showcontrol4j-element/javadoc.svg" alt="showcontrol4j-element javadoc"></a>
+      </td>
+    </tr>
+    <tr>
+      <td>showcontrol4j-trigger</td>
+      <td>
+          <a href="https://javadoc.io/doc/org.showcontrol4j/showcontrol4j-trigger">
+          <img src="https://javadoc.io/badge2/org.showcontrol4j/showcontrol4j-trigger/javadoc.svg" alt="showcontrol4j-trigger javadoc"></a>
+      </td>
+    </tr>
+  </table>
+</p>
