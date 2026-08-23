@@ -1,6 +1,9 @@
 package org.showcontrol4j.element.raspberrypi;
 
-import com.pi4j.io.gpio.*;
+import com.pi4j.Pi4J;
+import com.pi4j.context.Context;
+import com.pi4j.io.gpio.digital.DigitalOutput;
+import com.pi4j.plugin.mock.provider.gpio.digital.MockDigitalOutputProvider;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.impl.AMQImpl;
@@ -19,19 +22,18 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.EnumSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests for the {@link GeneralPurposeIOShowElement} class.
+ * Tests for the {@link GeneralPurposeIOShowElement} class. Uses Pi4J's mock digital output provider
+ * (pi4j-plugin-mock) so these run without real Raspberry Pi hardware.
  *
  * @author James Hare
  */
@@ -39,8 +41,9 @@ public class GeneralPurposeIOShowElementTest {
 
     private final String name = "Test Element Name";
     private final Long id = 123456L;
+    private final int bcmPin = 4;
     private ExecutorService executor;
-    static final SimulatedGpioProvider simulator = new SimulatedGpioProvider();
+    private Context pi4j;
 
     @Mock
     private MessageExchange mockMessageExchange;
@@ -56,42 +59,35 @@ public class GeneralPurposeIOShowElementTest {
     private AMQImpl.Queue.BindOk mockBindOk;
     @Mock
     private AMQImpl.Queue.DeclareOk mockQueueDeclareOk;
-    @Mock
-    private Pin mockIOPin;
-    @Mock
-    private EnumSet<PinMode> mockPinModeEnumSet;
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
-
-    @BeforeClass
-    public static void before_all() {
-        GpioFactory.setDefaultProvider(simulator);
-    }
 
     @Before
     public void init() throws Exception {
         MockitoAnnotations.openMocks(this);
         executor = Executors.newFixedThreadPool(5);
+        pi4j = Pi4J.newContextBuilder()
+                .noAutoDetect()
+                .add(MockDigitalOutputProvider.newInstance())
+                .build();
         when(mockBrokerConnectionFactory.newConnection()).thenReturn(mockConnection);
         when(mockConnection.createChannel()).thenReturn(mockChannel);
         when(mockChannel.exchangeDeclare(anyString(), anyString())).thenReturn(mockExchangeDeclareOk);
         when(mockChannel.queueDeclare()).thenReturn(mockQueueDeclareOk);
         when(mockQueueDeclareOk.getQueue()).thenReturn("test");
         when(mockChannel.queueBind(anyString(), anyString(), anyString())).thenReturn(mockBindOk);
-        when(mockIOPin.getProvider()).thenReturn("RaspberryPi GPIO Provider");
-        when(mockIOPin.getSupportedPinModes()).thenReturn(mockPinModeEnumSet);
-        when(mockPinModeEnumSet.contains(any(PinMode.class))).thenReturn(true);
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws Exception {
         executor.shutdownNow();
+        if (!pi4j.isShutdown()) {
+            pi4j.shutdown();
+        }
     }
 
-    @Test
-    public void testConstructor() {
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
+    private GeneralPurposeIOShowElement newElement() {
+        return new GeneralPurposeIOShowElement(name, id, mockMessageExchange, mockBrokerConnectionFactory, pi4j, bcmPin) {
             @Override
             protected void showSequence() throws InterruptedException {
                 // do nothing.
@@ -102,13 +98,18 @@ public class GeneralPurposeIOShowElementTest {
                 // do nothing.
             }
         };
+    }
+
+    @Test
+    public void testConstructor() {
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = newElement();
 
         assertThat(generalPurposeIOShowElement, CoreMatchers.instanceOf(GeneralPurposeIOShowElement.class));
         assertEquals(name, generalPurposeIOShowElement.getName());
         assertEquals(id, generalPurposeIOShowElement.getId());
         assertEquals(mockMessageExchange, generalPurposeIOShowElement.getMessageExchange());
         assertEquals(mockBrokerConnectionFactory, generalPurposeIOShowElement.getBrokerConnectionFactory());
-        assertEquals(PinState.LOW, generalPurposeIOShowElement.getPinState());
+        assertTrue(generalPurposeIOShowElement.getPinState().isLow());
     }
 
     @Test
@@ -117,7 +118,7 @@ public class GeneralPurposeIOShowElementTest {
         final SCFJMessage testGoSCFJMessage = ShowCommand.GO(0L);
 
         final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
+                mockMessageExchange, mockBrokerConnectionFactory, pi4j, bcmPin) {
             @Override
             protected void showSequence() throws InterruptedException {
                 ranShowSequence[0] = true;
@@ -144,7 +145,7 @@ public class GeneralPurposeIOShowElementTest {
         final SCFJMessage testGoSCFJMessageWithStartTime = ShowCommand.GO(5000L);
 
         final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
+                mockMessageExchange, mockBrokerConnectionFactory, pi4j, bcmPin) {
             @Override
             protected void showSequence() throws InterruptedException {
                 ranShowSequence[0] = true;
@@ -173,7 +174,7 @@ public class GeneralPurposeIOShowElementTest {
         final SCFJMessage testIdleSCFJMessage = ShowCommand.IDLE(0L);
 
         final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
+                mockMessageExchange, mockBrokerConnectionFactory, pi4j, bcmPin) {
             @Override
             protected void showSequence() throws InterruptedException {
                 // do nothing.
@@ -215,7 +216,8 @@ public class GeneralPurposeIOShowElementTest {
         final int[] idleLoopCounter = {0};
         final SCFJMessage testIdleSCFJMessageWithStartTime = ShowCommand.IDLE(5000L);
 
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id, mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
+                mockMessageExchange, mockBrokerConnectionFactory, pi4j, bcmPin) {
             @Override
             protected void showSequence() throws InterruptedException {
                 // do nothing.
@@ -256,50 +258,28 @@ public class GeneralPurposeIOShowElementTest {
     public void testShutdownProcedure() throws Exception {
         final SCFJMessage testShutdownSCFJMessage = ShowCommand.SHUTDOWN();
 
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
-            @Override
-            protected void showSequence() throws InterruptedException {
-                // do nothing.
-            }
-
-            @Override
-            protected void idleLoop() throws InterruptedException {
-                // do nothing.
-            }
-        };
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = newElement();
 
         generalPurposeIOShowElement.init();
 
-        final GpioController mockGpioController = mock(GpioController.class);
+        final Context mockContext = mock(Context.class);
 
-        final Field gpioControllerField = GeneralPurposeIOShowElement.class.getDeclaredField("gpioController");
-        gpioControllerField.setAccessible(true);
+        final Field contextField = GeneralPurposeIOShowElement.class.getDeclaredField("pi4j");
+        contextField.setAccessible(true);
         final Field modifiers = Field.class.getDeclaredField("modifiers");
         modifiers.setAccessible(true);
-        modifiers.setInt(gpioControllerField, gpioControllerField.getModifiers() & ~Modifier.FINAL);
-        gpioControllerField.set(generalPurposeIOShowElement, mockGpioController);
+        modifiers.setInt(contextField, contextField.getModifiers() & ~Modifier.FINAL);
+        contextField.set(generalPurposeIOShowElement, mockContext);
 
         exit.expectSystemExitWithStatus(0);
         executor.submit(new TestTask(generalPurposeIOShowElement, testShutdownSCFJMessage));
         TimeUnit.MILLISECONDS.sleep(1000); // pause to give the system a chance to exit
-        verify(mockGpioController, times(1)).shutdown();
+        verify(mockContext, times(1)).shutdown();
     }
 
     @Test
     public void testTurnOn() {
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
-            @Override
-            protected void showSequence() throws InterruptedException {
-                // do nothing.
-            }
-
-            @Override
-            protected void idleLoop() throws InterruptedException {
-                // do nothing.
-            }
-        };
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = newElement();
 
         generalPurposeIOShowElement.init();
 
@@ -309,18 +289,7 @@ public class GeneralPurposeIOShowElementTest {
 
     @Test
     public void testTurnOff() {
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
-            @Override
-            protected void showSequence() throws InterruptedException {
-                // do nothing.
-            }
-
-            @Override
-            protected void idleLoop() throws InterruptedException {
-                // do nothing.
-            }
-        };
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = newElement();
 
         generalPurposeIOShowElement.init();
 
@@ -330,18 +299,7 @@ public class GeneralPurposeIOShowElementTest {
 
     @Test
     public void testToggle() {
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
-            @Override
-            protected void showSequence() throws InterruptedException {
-                // do nothing.
-            }
-
-            @Override
-            protected void idleLoop() throws InterruptedException {
-                // do nothing.
-            }
-        };
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = newElement();
 
         generalPurposeIOShowElement.init();
 
@@ -354,85 +312,57 @@ public class GeneralPurposeIOShowElementTest {
 
     @Test
     public void testPulse() throws Exception {
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
-            @Override
-            protected void showSequence() throws InterruptedException {
-                // do nothing.
-            }
-
-            @Override
-            protected void idleLoop() throws InterruptedException {
-                // do nothing.
-            }
-        };
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = newElement();
 
         generalPurposeIOShowElement.init();
 
-        final GpioPinDigitalOutput mockGpioPinDigitalOutput = mock(GpioPinDigitalOutput.class);
+        final DigitalOutput mockDigitalOutput = mock(DigitalOutput.class);
 
         final Field field = GeneralPurposeIOShowElement.class.getDeclaredField("pinOutput");
         field.setAccessible(true);
         final Field modifiers = Field.class.getDeclaredField("modifiers");
         modifiers.setAccessible(true);
         modifiers.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-        field.set(generalPurposeIOShowElement, mockGpioPinDigitalOutput);
+        field.set(generalPurposeIOShowElement, mockDigitalOutput);
 
         generalPurposeIOShowElement.pulse(2000L, true);
-        verify(mockGpioPinDigitalOutput, times(1)).pulse(2000L, true);
-        generalPurposeIOShowElement.pulse(2000L, false);
-        verify(mockGpioPinDigitalOutput, times(1)).pulse(2000L, false);
-        generalPurposeIOShowElement.pulse(2000L);
-        verify(mockGpioPinDigitalOutput, times(1)).pulse(2000L);
-        generalPurposeIOShowElement.pulse(2000L, TimeUnit.MILLISECONDS);
-        verify(mockGpioPinDigitalOutput, times(1)).pulse(2000L, TimeUnit.MILLISECONDS);
-        generalPurposeIOShowElement.pulse(2000L, TimeUnit.MINUTES);
-        verify(mockGpioPinDigitalOutput, times(1)).pulse(2000L, TimeUnit.MINUTES);
-        generalPurposeIOShowElement.pulse(2000L, TimeUnit.HOURS);
-        verify(mockGpioPinDigitalOutput, times(1)).pulse(2000L, TimeUnit.HOURS);
+        verify(mockDigitalOutput, times(1)).pulse(2000, TimeUnit.MILLISECONDS);
+
+        generalPurposeIOShowElement.pulse(3000L, false);
+        verify(mockDigitalOutput, times(1)).pulseAsync(3000, TimeUnit.MILLISECONDS);
+
+        generalPurposeIOShowElement.pulse(4000L);
+        verify(mockDigitalOutput, times(1)).pulseAsync(4000, TimeUnit.MILLISECONDS);
+
+        generalPurposeIOShowElement.pulse(5000L, TimeUnit.MILLISECONDS);
+        verify(mockDigitalOutput, times(1)).pulse(5000, TimeUnit.MILLISECONDS);
+
+        generalPurposeIOShowElement.pulse(6000L, TimeUnit.MINUTES);
+        verify(mockDigitalOutput, times(1)).pulse(6000, TimeUnit.MINUTES);
+
+        generalPurposeIOShowElement.pulse(7000L, TimeUnit.HOURS);
+        verify(mockDigitalOutput, times(1)).pulse(7000, TimeUnit.HOURS);
     }
 
     @Test
     public void testGetPinState() {
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
-            @Override
-            protected void showSequence() throws InterruptedException {
-                // do nothing.
-            }
-
-            @Override
-            protected void idleLoop() throws InterruptedException {
-                // do nothing.
-            }
-        };
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = newElement();
 
         generalPurposeIOShowElement.init();
 
-        assertEquals(PinState.LOW, generalPurposeIOShowElement.getPinState());
+        assertTrue(generalPurposeIOShowElement.getPinState().isLow());
         generalPurposeIOShowElement.toggle();
-        assertEquals(PinState.HIGH, generalPurposeIOShowElement.getPinState());
+        assertTrue(generalPurposeIOShowElement.getPinState().isHigh());
     }
 
     @Test
     public void testToString() {
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
-                mockMessageExchange, mockBrokerConnectionFactory, mockIOPin) {
-            @Override
-            protected void showSequence() throws InterruptedException {
-                // do nothing.
-            }
-
-            @Override
-            protected void idleLoop() throws InterruptedException {
-                // do nothing.
-            }
-        };
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = newElement();
 
         generalPurposeIOShowElement.init();
 
-        assertEquals("GeneralPurposeIOShowElement(super=ShowElement(name=Test Element Name, id=123456)," +
-                " pinOutput=\"Test Element Name\" <mockIOPin>)", generalPurposeIOShowElement.toString());
+        assertTrue(generalPurposeIOShowElement.toString()
+                .startsWith("GeneralPurposeIOShowElement(super=ShowElement(name=Test Element Name, id=123456), pinOutput="));
     }
 
     //------------------------------------ HELPER METHODS ------------------------------------//
