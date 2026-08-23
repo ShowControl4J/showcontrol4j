@@ -20,6 +20,57 @@ skeleton to a demoable, publishable, actively maintained show control library.
 
 Dated, most recent first. Each entry: the decision, the reasoning, and status.
 
+### 2026-08-23 — `showcontrol4j-element` migrated to Pi4J V2
+`GeneralPurposeIOShowElement` rewritten against Pi4J V2 (`com.pi4j:pi4j-core:4.0.2` -
+confirmed by real dependency resolution and `javap` against the actual jar, not
+documentation summaries). **Breaking API change**, intentional: the constructor now
+takes a shared Pi4J `Context` (build once per application via `Pi4J.newAutoContext()`,
+not per element - the context owns platform/provider registration for the whole JVM)
+and a plain `int bcmPin` instead of a `Pin`. `turnOn/turnOff/toggle/pulse` now catch
+and log Pi4J's checked `IOException` internally rather than propagating it, matching
+how the rest of `ShowElement` already handles broker I/O errors. Unit tests rewritten
+against `pi4j-plugin-mock` (`MockDigitalOutputProvider`) instead of Pi4J V1's
+`SimulatedGpioProvider`, which no longer exists. This library intentionally does NOT
+depend on a concrete hardware provider (e.g. `pi4j-plugin-gpiod` for Pi 5's RP1 chip,
+or `pi4j-plugin-raspberrypi`) - that's an application-level choice, added by whoever
+assembles the actual runnable show element, not baked into this library. **Status:
+settled - see verification notes and open follow-ups below.**
+
+**Verification:** `mvn clean install` (main + test compile) succeeded against the real,
+network-resolved Pi4J V2 dependency tree - not just written to compile, actually
+compiled. `showcontrol4j-core`'s full test suite (14/14) passed. The
+`showcontrol4j-element` test suite could **not** be executed - see the JDK 24+
+`system-rules` blocker below, which is pre-existing and unrelated to this change (it
+fails identically on the untouched `ShowElementTest`). No physical Raspberry Pi
+hardware was available to verify against real GPIO.
+
+**Three prerequisite fixes, discovered while validating this change, needed to happen
+first - all pre-existing issues, not introduced by this change:**
+- **Lombok bumped 1.18.20 → 1.18.42** in `showcontrol4j-core` and `showcontrol4j-element`.
+  1.18.20 cannot run at all on JDK 21+ (hard `javac` internals crash). This is the same
+  fix the "Stay on Java" decision below already anticipated for the Java 25 bump - it
+  turned out to be needed immediately, not just at that future step.
+- **`maven-compiler-plugin` bumped 3.5.1 → 3.13.0**, with Lombok added to
+  `annotationProcessorPaths` explicitly, in both modules. Without the explicit path,
+  a clean build silently failed to run Lombok's annotation processing at all (missing
+  `log` fields, missing `@Builder`/`@Data`-generated methods) - implicit classpath-based
+  processor discovery does not reliably work with this plugin/JDK combination.
+- **Confirmed Pi4J V2 4.0.2 itself requires a JDK 25 compiler/runtime to even read its
+  class files** (class file version 69). This sandbox only had JDK 21 installed;
+  `openjdk-25-jdk-headless` had to be installed to validate this change at all. This is
+  hard confirmation that the "Java target: 25" decision below is a real requirement for
+  this Pi4J version, not just a nice-to-have.
+
+**New blocker found, not fixed here - needed before/during `bump-java-25`:**
+`com.github.stefanbirkner:system-rules` (`ExpectedSystemExit`, used to test
+`ShowElement`'s `System.exit(0)` shutdown path) calls `System.setSecurityManager()`,
+which unconditionally throws on JDK 24+ (`SecurityManager` was permanently removed,
+JEP 486). This breaks **every** test in `showcontrol4j-element` and (untested here but
+almost certainly) `showcontrol4j-trigger`, not just Pi4J-related ones - the `@Rule` runs
+before every test method regardless of what that test does. `bump-java-25` cannot be
+called done until this is resolved - likely by replacing `system-rules` or refactoring
+`ShowElement.runShutdown()`'s `System.exit()` call to be tested some other way.
+
 ### 2026-08-23 — Java target: 25 (LTS), not 17/21
 Bumping straight to Java 25 rather than 17/21. It's a legitimate current LTS
 (GA September 16, 2025 — an actual Long-Term-Support release on the
@@ -110,8 +161,9 @@ Lock decisions so nothing gets rebuilt twice.
 
 ### Phase 1 — Toolchain Modernization
 Get the existing three modules onto a foundation that isn't already obsolete.
-- [ ] Pi4J v1 → v2 migration (v1's WiringPi base is dead, doesn't run on current
-      Pi hardware — mandatory, not polish)
+- [x] Pi4J v1 → v2 migration (v1's WiringPi base is dead, doesn't run on current
+      Pi hardware — mandatory, not polish) — compiled and core-module-verified; see
+      Decision Log 2026-08-23 for what is and isn't confirmed
 - [ ] RabbitMQ client → MQTT client (Paho or HiveMQ) in `showcontrol4j-core`
 - [ ] Mosquitto secured with auth + TLS from day one
 - [ ] Fail-safe watchdog: an element defaults to idle/off if it loses the broker
@@ -165,6 +217,10 @@ Sustain a content and contribution cadence instead of a one-time launch.
   stale instructions.
 - **RabbitMQ → MQTT touches only `showcontrol4j-core`.** The trigger/element
   abstractions don't need to change, just the transport underneath them.
+- **`system-rules`' `ExpectedSystemExit` is incompatible with JDK 24+** (relies on
+  `SecurityManager`, permanently removed in JEP 486). Breaks every test in a class that
+  uses it, not just the one testing `System.exit()`. Must be resolved before
+  `bump-java-25` can be called done — see Decision Log 2026-08-23.
 - **JDK 25 isn't in Raspberry Pi OS's apt repos.** Setup docs must direct
   contributors to Eclipse Temurin (Adoptium) aarch64 builds — `apt install
   default-jdk` will not give you JDK 25.
