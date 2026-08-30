@@ -11,6 +11,10 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.MockitoAnnotations;
 
+import java.io.File;
+import java.net.URISyntaxException;
+import java.net.URL;
+
 /**
  * Tests for the {@link BrokerConnectionFactory} class.
  *
@@ -111,6 +115,61 @@ public class BrokerConnectionFactoryTest {
 
     assertThat(first, instanceOf(Mqtt3Client.class));
     assertThat(second, instanceOf(Mqtt3Client.class));
+  }
+
+  @Test
+  public void testNewConnection_withoutTls_noSslConfig() {
+    final BrokerConnectionFactory testBrokerConnectionFactory = new BrokerConnectionFactory.Builder()
+        .host(host)
+        .build();
+
+    final Mqtt3Client client = testBrokerConnectionFactory.newConnection(clientIdentifier);
+
+    assertTrue(client.getConfig().getSslConfig().isEmpty());
+  }
+
+  @Test
+  public void testNewConnection_tlsWithDefaultConfig_appliesSslConfig() {
+    final BrokerConnectionFactory testBrokerConnectionFactory = new BrokerConnectionFactory.Builder()
+        .host(host)
+        .tls()
+        .build();
+
+    final Mqtt3Client client = testBrokerConnectionFactory.newConnection(clientIdentifier);
+
+    assertTrue(client.getConfig().getSslConfig().isPresent());
+  }
+
+  @Test
+  public void testNewConnection_tlsWithTrustedCertificate_appliesSslConfig() throws Exception {
+    final BrokerConnectionFactory testBrokerConnectionFactory = new BrokerConnectionFactory.Builder()
+        .host(host)
+        .tls(testCertificateFile())
+        .build();
+
+    final Mqtt3Client client = testBrokerConnectionFactory.newConnection(clientIdentifier);
+    final Mqtt3ClientConfig config = client.getConfig();
+
+    assertTrue(config.getSslConfig().isPresent());
+    assertTrue(config.getSslConfig().orElseThrow().getTrustManagerFactory().isPresent());
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testNewConnection_tlsWithMissingCertificateFile_throwsIllegalArgumentException() {
+    final BrokerConnectionFactory testBrokerConnectionFactory = new BrokerConnectionFactory.Builder()
+        .host(host)
+        .tls(new File("does-not-exist.pem"))
+        .build();
+
+    testBrokerConnectionFactory.newConnection(clientIdentifier);
+  }
+
+  //------------------------------------ HELPER METHODS ------------------------------------//
+
+  private File testCertificateFile() throws URISyntaxException {
+    final URL certificateUrl = getClass().getClassLoader().getResource("test-broker-ca.pem");
+    assertThat(certificateUrl, org.hamcrest.CoreMatchers.notNullValue());
+    return new File(certificateUrl.toURI());
   }
 
 }
