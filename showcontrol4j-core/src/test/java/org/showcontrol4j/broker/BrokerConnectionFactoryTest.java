@@ -5,6 +5,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedListener;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3ClientConfig;
 import org.junit.Before;
@@ -162,6 +163,40 @@ public class BrokerConnectionFactoryTest {
         .build();
 
     testBrokerConnectionFactory.newConnection(clientIdentifier);
+  }
+
+  @Test
+  public void testNewConnection_automaticReconnectEnabled() {
+    final BrokerConnectionFactory testBrokerConnectionFactory = new BrokerConnectionFactory.Builder()
+        .host(host)
+        .build();
+
+    final Mqtt3Client client = testBrokerConnectionFactory.newConnection(clientIdentifier);
+
+    assertTrue(client.getConfig().getAutomaticReconnect().isPresent());
+  }
+
+  @Test
+  public void testNewConnectionWithListener_automaticReconnectEnabled() {
+    final BrokerConnectionFactory testBrokerConnectionFactory = new BrokerConnectionFactory.Builder()
+        .host(host)
+        .build();
+
+    final Mqtt3Client client = testBrokerConnectionFactory.newConnection(clientIdentifier, context -> { });
+
+    assertTrue(client.getConfig().getAutomaticReconnect().isPresent());
+  }
+
+  @Test
+  public void testNewConnectionWithListener_registersDisconnectedListener() {
+    final BrokerConnectionFactory testBrokerConnectionFactory = new BrokerConnectionFactory.Builder()
+        .host(host)
+        .build();
+    final MqttClientDisconnectedListener disconnectedListener = context -> { };
+
+    final Mqtt3Client client = testBrokerConnectionFactory.newConnection(clientIdentifier, disconnectedListener);
+
+    assertTrue(client.getConfig().getDisconnectedListeners().contains(disconnectedListener));
   }
 
   //------------------------------------ HELPER METHODS ------------------------------------//

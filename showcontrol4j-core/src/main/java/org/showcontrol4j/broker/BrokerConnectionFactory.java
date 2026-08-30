@@ -1,6 +1,7 @@
 package org.showcontrol4j.broker;
 
 import com.hivemq.client.mqtt.MqttClientSslConfig;
+import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedListener;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3ClientBuilder;
 
@@ -43,7 +44,9 @@ public class BrokerConnectionFactory {
   /**
    * Builds a new, not-yet-connected {@link Mqtt3Client} for the given client identifier. Callers are
    * responsible for connecting it (via {@code toBlocking().connect()} or {@code toAsync().connect()})
-   * before publishing or subscribing.
+   * before publishing or subscribing. Automatic reconnection is enabled - see
+   * {@link #newConnection(String, MqttClientDisconnectedListener)} to also be notified when that
+   * happens, e.g. to fail safe while a reconnect is in progress.
    *
    * @param clientIdentifier a unique MQTT client identifier for this connection - two simultaneous
    *                          connections to the same broker with the same identifier will conflict.
@@ -51,10 +54,35 @@ public class BrokerConnectionFactory {
    *         and TLS settings.
    */
   public Mqtt3Client newConnection(final String clientIdentifier) {
+    return clientBuilder(clientIdentifier).build();
+  }
+
+  /**
+   * Builds a new, not-yet-connected {@link Mqtt3Client} for the given client identifier, invoking the
+   * given listener whenever this connection is lost - including while automatic reconnection is in
+   * progress. The listener is not called for a disconnect this client itself initiated (see
+   * {@link com.hivemq.client.mqtt.lifecycle.MqttDisconnectSource#USER}) - only for a connection that
+   * was lost unexpectedly.
+   *
+   * @param clientIdentifier a unique MQTT client identifier for this connection - two simultaneous
+   *                          connections to the same broker with the same identifier will conflict.
+   * @param disconnectedListener called on every unexpected disconnect.
+   * @return a new {@link Mqtt3Client} configured with this factory's broker host/port, credentials,
+   *         TLS settings, and the given disconnect listener.
+   */
+  public Mqtt3Client newConnection(final String clientIdentifier,
+                                    final MqttClientDisconnectedListener disconnectedListener) {
+    return clientBuilder(clientIdentifier)
+            .addDisconnectedListener(disconnectedListener)
+            .build();
+  }
+
+  private Mqtt3ClientBuilder clientBuilder(final String clientIdentifier) {
     final Mqtt3ClientBuilder clientBuilder = Mqtt3Client.builder()
             .identifier(clientIdentifier)
             .serverHost(host)
-            .serverPort(port);
+            .serverPort(port)
+            .automaticReconnectWithDefaultConfig();
     if (user != null) {
       clientBuilder.simpleAuth()
               .username(user)
@@ -68,7 +96,7 @@ public class BrokerConnectionFactory {
         clientBuilder.sslWithDefaultConfig();
       }
     }
-    return clientBuilder.build();
+    return clientBuilder;
   }
 
   /**

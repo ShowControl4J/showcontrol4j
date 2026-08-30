@@ -56,7 +56,7 @@ public class GeneralPurposeIOShowElementTest {
                 .add(MockDigitalOutputProvider.newInstance())
                 .build();
         final Mqtt3Client mockMqttClient = mock(Mqtt3Client.class, Mockito.RETURNS_DEEP_STUBS);
-        when(mockBrokerConnectionFactory.newConnection(anyString())).thenReturn(mockMqttClient);
+        when(mockBrokerConnectionFactory.newConnection(anyString(), any())).thenReturn(mockMqttClient);
     }
 
     @After
