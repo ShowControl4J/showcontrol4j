@@ -1,0 +1,98 @@
+name: Release to Maven Central
+
+"on":
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version part to bump for the next development version"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+          server-id: central
+          server-username: CENTRAL_TOKEN_USERNAME
+          server-password: CENTRAL_TOKEN_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: GPG_PASSPHRASE
+
+      - name: Configure git identity for release commits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Compute release and next development versions
+        id: versions
+        run: |
+          CURRENT_VERSION=$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.2:evaluate \
+            -Dexpression=project.version -DforceStdout)
+          RELEASE_VERSION="${CURRENT_VERSION%-SNAPSHOT}"
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE_VERSION"
+          case "${{ inputs.bump }}" in
+            major) NEXT_VERSION="$((MAJOR + 1)).0.0" ;;
+            minor) NEXT_VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
+            patch) NEXT_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+          esac
+
+          echo "release_version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "next_snapshot=${NEXT_VERSION}-SNAPSHOT" >> "$GITHUB_OUTPUT"
+
+      - name: Set release version
+        run: mvn -B versions:set -DnewVersion=${{ steps.versions.outputs.release_version }} -DprocessAllModules=true -DgenerateBackupPoms=false
+
+      # Full build + test on the exact commit being released, before anything is committed,
+      # tagged, or pushed - if this fails, the repo is untouched.
+      - name: Build and test the release version
+        run: mvn -B clean install
+
+      - name: Commit and tag the release version
+        run: |
+          git commit -am "Release ${{ steps.versions.outputs.release_version }} [skip ci]"
+          git tag "v${{ steps.versions.outputs.release_version }}"
+          git push origin main "v${{ steps.versions.outputs.release_version }}"
+
+      - name: Publish to Maven Central
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: mvn -B -Prelease clean deploy -DskipTests
+
+      - name: Set next development version
+        run: mvn -B versions:set -DnewVersion=${{ steps.versions.outputs.next_snapshot }} -DprocessAllModules=true -DgenerateBackupPoms=false
+
+      - name: Commit next development version
+        run: |
+          git commit -am "Prepare next development version ${{ steps.versions.outputs.next_snapshot }} [skip ci]"
+          git push origin main
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ steps.versions.outputs.release_version }}" --generate-notes

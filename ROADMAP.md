@@ -22,6 +22,118 @@ original RabbitMQ/Pi4J V1 2021 implementations; see Decision Log.
 
 Dated, most recent first. Each entry: the decision, the reasoning, and status.
 
+### 2026-08-30 — Release-to-Maven-Central workflow added (pulled forward from Phase 4)
+Requested ahead of where this roadmap had it sequenced - Phase 4's
+`setup-maven-central-portal` item. Built the automation now; the actual
+publishing prerequisites (below) are still Phase 4's to complete, and this
+cannot successfully publish until they do.
+
+**`.github/workflows/release.yml`**: `workflow_dispatch` only (never runs
+automatically) with one input, `bump` (patch/minor/major, default patch) -
+that's the "manual step." Version numbers are never hand-typed: the workflow
+reads the current version, strips `-SNAPSHOT` for the release, builds and
+runs the full test suite against *that exact version* before touching git at
+all, then only if that passes: commits, tags (`vX.Y.Z`), pushes, publishes,
+computes the next `-SNAPSHOT` per the chosen bump type, commits and pushes
+that too, and opens a GitHub Release from the tag. Verified for real, not
+just written to look right: ran `mvn versions:set -DprocessAllModules=true`
+against this actual reactor and confirmed it correctly updates all of the
+root version, all three modules' `<parent>` version refs, *and* the two
+inter-module `<dependency>` version refs (element→core, trigger→core) - a
+plain single-module assumption would have missed those last two. Also
+independently tested the version-bump shell arithmetic for all three bump
+types against the real current version (1.1.0-SNAPSHOT → 1.1.1-SNAPSHOT /
+1.2.0-SNAPSHOT / 2.0.0-SNAPSHOT).
+
+**Root `pom.xml` reworked for Central Portal, not OSSRH.** Removed the old
+`distributionManagement` (`s01.oss.sonatype.org` URLs - dead, this is
+exactly the OSSRH sunset flagged back on 2026-08-22) and
+`nexus-staging-maven-plugin`. Added `org.sonatype.central:central-publishing-maven-plugin`
+(0.11.0, confirmed against Maven Central directly, not a doc example - there
+are two different plugins with similar names circulating in blog posts;
+this is the one under Sonatype's own `org.sonatype.central` groupId) with
+`autoPublish=true`, so a successful upload doesn't need a second manual
+click in the Central Portal UI - the GitHub Actions manual trigger *is* the
+one manual step, matching what was asked for. Bumped `maven-source-plugin`
+(3.2.0→3.4.0), `maven-javadoc-plugin` (3.2.0→3.12.0), `maven-gpg-plugin`
+(1.6→3.2.8, was 2016-era), and `versions-maven-plugin` (2.7→2.21.0, needed
+for the automated bump to work reliably) - same "old release tooling
+silently breaks" pattern as everything else bumped this week. Removed
+`maven-release-plugin` entirely - its interactive/SCM-tag-based flow is
+superseded by the explicit version-bump steps in `release.yml`, and leaving
+both around invites someone reasonably assuming `mvn release:prepare` still
+works.
+
+**Verified as far as it's possible to without real credentials**: `mvn
+-Prelease clean verify` on a real module here runs source-jar and
+javadoc-jar generation successfully and then fails exactly where expected -
+`maven-gpg-plugin:sign`, because no key is configured in this sandbox. That
+failure boundary is the correct, honest one: everything before it is proven
+to work; nothing after it can be, without the prerequisites below. A plain
+`mvn clean install` (no `-Prelease`) is unaffected either way, confirmed by
+running it after these changes - the release profile only activates when
+explicitly invoked.
+
+**`build.yml` also updated**: triggers on push to `main` *or* `master` now,
+not just `main`, per how it was asked for.
+
+**Still required before this can publish anything - none of these are
+things an agent can do on your behalf:**
+1. The domain (Phase 0, still unchecked below) needs to be repurchased -
+   Central Portal namespace verification for `org.showcontrol4j` is a DNS
+   TXT record.
+2. A Central Portal account (central.sonatype.com), with that namespace
+   verified.
+3. A user token generated there (central.sonatype.com/usertoken) → two
+   GitHub repo secrets: `CENTRAL_TOKEN_USERNAME`, `CENTRAL_TOKEN_PASSWORD`.
+4. A GPG key pair, its public key published to a keyserver Central checks
+   against, and the private key + passphrase as two more secrets:
+   `GPG_PRIVATE_KEY` (ASCII-armored, `gpg --armor --export-secret-keys
+   <key-id>`) and `GPG_PASSPHRASE`.
+5. Confirm `main`'s branch protection (if any) allows the workflow's own
+   push of the two version-bump commits - this wasn't something to guess at
+   from here, it needs a check against the actual repo settings.
+
+**Status: workflow and pom scaffolding settled; publishing itself blocked
+on the five items above, not on anything in this codebase.**
+
+### 2026-08-30 — Travis CI replaced with GitHub Actions
+`.github/workflows/build.yml`: single job, `ubuntu-latest`, Temurin 25,
+`mvn -B clean install` builds and tests all three modules in one pass via
+the reactor. Triggers on push to `main` and all pull request activity.
+`.travis.yml` deleted (Travis's free tier for open source hasn't worked
+since ~2021 - this isn't losing working CI, it's replacing CI that's
+already been silently dead). README badge swapped to point at the new
+workflow.
+
+**Checked before designing this**: confirmed via the GitHub API that this
+repo is public (`"private": false`). GitHub Actions on standard GitHub-hosted
+runners is free and unlimited for public repositories - the commonly-cited
+2,000 minutes/month cap is specifically the private-repo Free-plan
+allowance, and doesn't apply here. Designed lean anyway, since it's good
+practice regardless and protects against the repo (or someone's private
+fork of it) ever mattering for minutes:
+- One job, one OS, no matrix - nothing here needs cross-platform or
+  cross-JDK-version testing yet.
+- `cache: maven` (built into `actions/setup-java`) caches `~/.m2/repository`
+  keyed on `pom.xml` hashes, so dependency resolution isn't repeated (and
+  re-downloaded) on every run.
+- `concurrency` + `cancel-in-progress: true` - a new push to the same branch
+  or PR cancels the run it superseded, rather than letting a stale run
+  finish.
+- `timeout-minutes: 10` - safety net against a hung job burning time
+  unbounded; the actual build takes well under a minute.
+
+**Coveralls removed, not just left out.** Travis previously ran
+`coveralls:report` after tests; since Travis itself was already dead and
+Coveralls has no purpose without it, `org.eluder.coveralls:coveralls-maven-plugin`
+was removed from the root `pom.xml` rather than carried forward unused.
+`jacoco-maven-plugin` stays - it's a general coverage-instrumentation tool,
+independent of Coveralls, and still useful on its own (e.g. a future local
+or CI coverage report). If coverage reporting to an external service is
+wanted again later, that's a fresh decision (which service, a repo token as
+a GitHub secret), not a revival of this specific integration.
+
 ### 2026-08-30 — Java target bump to 25 landed
 The actual `maven.compiler.source`/`target` bump the 2026-08-23 decision
 called for. Smaller than it might look: Lombok, `maven-compiler-plugin`,
@@ -402,7 +514,7 @@ Get the existing three modules onto a foundation that isn't already obsolete.
       the task that replaces it rather than patching a CI config being removed
 - [x] Pin `maven-compiler-plugin` to a version supporting `--release 25` (3.13.0,
       done as a build-validation prerequisite for the Pi4J/MQTT work)
-- [ ] Travis CI → GitHub Actions (build + test on push/PR)
+- [x] Travis CI → GitHub Actions (build + test on push/PR) — see Decision Log 2026-08-30
 - [x] Lombok (≥1.18.42) and Mockito (5.23.0) bumped, all three modules, plus
       JaCoCo (0.8.15) at the root — done as build-validation prerequisites,
       not a deliberate pass; Jackson and SLF4J still on their original versions
@@ -425,7 +537,10 @@ One physical, working demo proving the whole chain end to end.
 
 ### Phase 4 — Publish & Launch
 Make the project findable, installable, and citable.
-- [ ] Maven Central Portal setup, first `2.0.0` release
+- [ ] Maven Central Portal setup, first `2.0.0` release — the release
+      *workflow* itself was built early (see Decision Log 2026-08-30); this
+      item is now just the five external prerequisites listed there (domain,
+      Central Portal account + namespace verification, GPG key, repo secrets)
 - [ ] Cloudflare Pages site live on the reclaimed domain
 - [ ] README + docs rewritten around the new architecture
 - [ ] First 2-3 YouTube videos: origin story, toolchain rebuild, reference build
