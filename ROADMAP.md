@@ -22,6 +22,38 @@ original RabbitMQ/Pi4J V1 2021 implementations; see Decision Log.
 
 Dated, most recent first. Each entry: the decision, the reasoning, and status.
 
+### 2026-08-30 — Java target bump to 25 landed
+The actual `maven.compiler.source`/`target` bump the 2026-08-23 decision
+called for. Smaller than it might look: Lombok, `maven-compiler-plugin`,
+Mockito, and JaCoCo were already bumped to JDK-25-compatible versions across
+three earlier PRs, as prerequisites for validating those PRs' own changes -
+this one only needed the module properties themselves changed.
+
+**Switched `source`/`target` to `maven.compiler.release`** in all three
+modules (was two properties + two plugin config elements per module; now
+one of each). `release` is the more correct choice for actually targeting a
+JDK version, not just cross-compiling to its bytecode level - it also
+constrains which JDK APIs the code is allowed to use to what existed in that
+release, which plain `source`/`target` doesn't.
+
+**Verified both directions**, not just that it builds: `mvn clean install`
+under JDK 25 - full reactor green (59/59). Then, to confirm the `release`
+declaration is doing real work and not just decorative, ran the same build
+under this sandbox's default JDK 21 - it now fails immediately with `error:
+release version 25 not supported`, which is the correct, desired behavior
+for a contributor who doesn't have JDK 25 installed yet, rather than a
+silent wrong-bytecode build.
+
+**Deliberately did not touch `.travis.yml`**, still pinned to `openjdk11`.
+It was already stale; this change makes it genuinely broken, not just
+outdated - but `github-actions-ci` (next in Phase 1) replaces it entirely,
+so patching a CI config on its way out is wasted effort. Anyone watching
+Travis between this merge and that one will see it fail; that's expected
+and self-resolving.
+
+**Not done here, still open** (separate `bump-dependencies` task): Jackson
+and SLF4J are still on their original 2021 versions.
+
 ### 2026-08-30 — Fail-safe connection watchdog added to ShowElement
 Delivers the Phase 1 "fail-safe watchdog" item: a Show Element now defaults to
 idle, rather than staying frozen in whatever it was doing, when it
@@ -364,10 +396,10 @@ Get the existing three modules onto a foundation that isn't already obsolete.
       2026-08-30; real-broker verification still pending (sandbox-blocked, see entry)
 - [x] Fail-safe watchdog: an element defaults to idle/off if it loses the broker
       connection, instead of freezing mid-state — see Decision Log 2026-08-30
-- [ ] Java 11 → 25 LTS (Eclipse Temurin aarch64 builds on Pi — see Decision Log) —
-      prerequisite tooling (Lombok, compiler-plugin, Mockito, JaCoCo) already
-      bumped as a side effect of validating other work; the actual module
-      `source`/`target` bump itself is still open
+- [x] Java 11 → 25 LTS (Eclipse Temurin aarch64 builds on Pi) — see Decision Log
+      2026-08-30; `.travis.yml` still pins `openjdk11` and is now genuinely
+      broken, not just stale - left alone deliberately, `github-actions-ci` is
+      the task that replaces it rather than patching a CI config being removed
 - [x] Pin `maven-compiler-plugin` to a version supporting `--release 25` (3.13.0,
       done as a build-validation prerequisite for the Pi4J/MQTT work)
 - [ ] Travis CI → GitHub Actions (build + test on push/PR)
