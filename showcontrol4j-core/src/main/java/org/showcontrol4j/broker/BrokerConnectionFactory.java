@@ -1,36 +1,52 @@
 package org.showcontrol4j.broker;
 
-import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.ConnectionFactory;
-import java.io.IOException;
-import java.util.concurrent.TimeoutException;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3ClientBuilder;
+
+import java.nio.charset.StandardCharsets;
 
 /**
- * Serves as a wrapper for the {@link ConnectionFactory} RabbitMQ object. Lombok was not used for
- * this class because we need to exclude the connectionFactory member and initialize it in the constructor.
+ * Serves as a wrapper for building {@link Mqtt3Client} MQTT client instances against a configured
+ * broker host/port and, optionally, credentials. Lombok was not used for this class because we need
+ * to exclude the stored configuration from a generated constructor and validate it ourselves.
  *
  * @author James Hare
  */
 public class BrokerConnectionFactory {
 
-  private final ConnectionFactory connectionFactory;
+  private final String host;
+  private final int port;
+  private final String user;
+  private final String password;
 
   private BrokerConnectionFactory(final Builder builder) {
-    connectionFactory = new ConnectionFactory();
-    connectionFactory.setHost(builder.host);
-    connectionFactory.setUsername(builder.user);
-    connectionFactory.setPassword(builder.password);
+    host = builder.host;
+    port = builder.port;
+    user = builder.user;
+    password = builder.password;
   }
 
   /**
-   * Returns a new connection from the Broker Connection Factory.
+   * Builds a new, not-yet-connected {@link Mqtt3Client} for the given client identifier. Callers are
+   * responsible for connecting it (via {@code toBlocking().connect()} or {@code toAsync().connect()})
+   * before publishing or subscribing.
    *
-   * @return {@link Connection} a new connection from the Broker Connection Factory.
-   * @throws IOException
-   * @throws TimeoutException
+   * @param clientIdentifier a unique MQTT client identifier for this connection - two simultaneous
+   *                          connections to the same broker with the same identifier will conflict.
+   * @return a new {@link Mqtt3Client} configured with this factory's broker host/port and credentials.
    */
-  public Connection newConnection() throws IOException, TimeoutException {
-    return connectionFactory.newConnection();
+  public Mqtt3Client newConnection(final String clientIdentifier) {
+    final Mqtt3ClientBuilder clientBuilder = Mqtt3Client.builder()
+            .identifier(clientIdentifier)
+            .serverHost(host)
+            .serverPort(port);
+    if (user != null) {
+      clientBuilder.simpleAuth()
+              .username(user)
+              .password(password.getBytes(StandardCharsets.UTF_8))
+              .applySimpleAuth();
+    }
+    return clientBuilder.build();
   }
 
   /**
@@ -38,7 +54,10 @@ public class BrokerConnectionFactory {
    */
   public static class Builder {
 
+    private static final int DEFAULT_PORT = 1883;
+
     private String host;
+    private int port = DEFAULT_PORT;
     private String user;
     private String password;
 
@@ -56,6 +75,18 @@ public class BrokerConnectionFactory {
      */
     public Builder host(final String host) {
       this.host = host;
+      return this;
+    }
+
+    /**
+     * Sets the port of the {@link BrokerConnectionFactory}. Defaults to 1883, the standard
+     * unencrypted MQTT port, if not set.
+     *
+     * @param port the broker port to connect to.
+     * @return the Builder object.
+     */
+    public Builder port(final int port) {
+      this.port = port;
       return this;
     }
 

@@ -1,16 +1,14 @@
 package org.showcontrol4j.element.raspberrypi;
 
+import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
 import com.pi4j.io.gpio.digital.DigitalOutput;
 import com.pi4j.plugin.mock.provider.gpio.digital.MockDigitalOutputProvider;
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.impl.AMQImpl;
 import org.hamcrest.CoreMatchers;
 import org.junit.*;
-import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.element.ShowElement;
@@ -21,7 +19,6 @@ import org.showcontrol4j.message.ShowCommand;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -49,18 +46,6 @@ public class GeneralPurposeIOShowElementTest {
     private MessageExchange mockMessageExchange;
     @Mock
     private BrokerConnectionFactory mockBrokerConnectionFactory;
-    @Mock
-    private Connection mockConnection;
-    @Mock
-    private Channel mockChannel;
-    @Mock
-    private AMQImpl.Exchange.DeclareOk mockExchangeDeclareOk;
-    @Mock
-    private AMQImpl.Queue.BindOk mockBindOk;
-    @Mock
-    private AMQImpl.Queue.DeclareOk mockQueueDeclareOk;
-    @Rule
-    public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
     @Before
     public void init() throws Exception {
@@ -70,12 +55,8 @@ public class GeneralPurposeIOShowElementTest {
                 .noAutoDetect()
                 .add(MockDigitalOutputProvider.newInstance())
                 .build();
-        when(mockBrokerConnectionFactory.newConnection()).thenReturn(mockConnection);
-        when(mockConnection.createChannel()).thenReturn(mockChannel);
-        when(mockChannel.exchangeDeclare(anyString(), anyString())).thenReturn(mockExchangeDeclareOk);
-        when(mockChannel.queueDeclare()).thenReturn(mockQueueDeclareOk);
-        when(mockQueueDeclareOk.getQueue()).thenReturn("test");
-        when(mockChannel.queueBind(anyString(), anyString(), anyString())).thenReturn(mockBindOk);
+        final Mqtt3Client mockMqttClient = mock(Mqtt3Client.class, Mockito.RETURNS_DEEP_STUBS);
+        when(mockBrokerConnectionFactory.newConnection(anyString())).thenReturn(mockMqttClient);
     }
 
     @After
@@ -257,8 +238,25 @@ public class GeneralPurposeIOShowElementTest {
     @Test
     public void testShutdownProcedure() throws Exception {
         final SCFJMessage testShutdownSCFJMessage = ShowCommand.SHUTDOWN();
+        final int[] exitStatus = {-1};
 
-        final GeneralPurposeIOShowElement generalPurposeIOShowElement = newElement();
+        final GeneralPurposeIOShowElement generalPurposeIOShowElement = new GeneralPurposeIOShowElement(name, id,
+                mockMessageExchange, mockBrokerConnectionFactory, pi4j, bcmPin) {
+            @Override
+            protected void showSequence() throws InterruptedException {
+                // do nothing.
+            }
+
+            @Override
+            protected void idleLoop() throws InterruptedException {
+                // do nothing.
+            }
+
+            @Override
+            protected void exitJvm(final int status) {
+                exitStatus[0] = status;
+            }
+        };
 
         generalPurposeIOShowElement.init();
 
@@ -266,15 +264,12 @@ public class GeneralPurposeIOShowElementTest {
 
         final Field contextField = GeneralPurposeIOShowElement.class.getDeclaredField("pi4j");
         contextField.setAccessible(true);
-        final Field modifiers = Field.class.getDeclaredField("modifiers");
-        modifiers.setAccessible(true);
-        modifiers.setInt(contextField, contextField.getModifiers() & ~Modifier.FINAL);
         contextField.set(generalPurposeIOShowElement, mockContext);
 
-        exit.expectSystemExitWithStatus(0);
         executor.submit(new TestTask(generalPurposeIOShowElement, testShutdownSCFJMessage));
         TimeUnit.MILLISECONDS.sleep(1000); // pause to give the system a chance to exit
         verify(mockContext, times(1)).shutdown();
+        assertEquals(0, exitStatus[0]);
     }
 
     @Test
@@ -320,9 +315,6 @@ public class GeneralPurposeIOShowElementTest {
 
         final Field field = GeneralPurposeIOShowElement.class.getDeclaredField("pinOutput");
         field.setAccessible(true);
-        final Field modifiers = Field.class.getDeclaredField("modifiers");
-        modifiers.setAccessible(true);
-        modifiers.setInt(field, field.getModifiers() & ~Modifier.FINAL);
         field.set(generalPurposeIOShowElement, mockDigitalOutput);
 
         generalPurposeIOShowElement.pulse(2000L, true);

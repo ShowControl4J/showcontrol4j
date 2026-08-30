@@ -1,7 +1,8 @@
 package org.showcontrol4j.element;
 
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.DeliverCallback;
+import com.hivemq.client.mqtt.datatypes.MqttQos;
+import com.hivemq.client.mqtt.exceptions.ConnectionFailedException;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -49,27 +50,29 @@ public abstract class ShowElement {
     public void init() {
         try {
             registerShowElement();
-        } catch (final IOException | TimeoutException e) {
-            log.error("An error occurred while registering the Show Element={}. {}", this.toString(), e.getStackTrace());
+        } catch (final ConnectionFailedException e) {
+            log.error("An error occurred while registering the Show Element={}. {}", this.toString(), e.getMessage());
         }
         log.info("Initialized Show Element={}", this.toString());
         handleMessage(SCFJMessage.builder().instruction(Instruction.IDLE).build());
     }
 
-    private void registerShowElement() throws IOException, TimeoutException {
-        final Channel channel = brokerConnectionFactory.newConnection().createChannel();
-        channel.exchangeDeclare(messageExchange.getName(), "fanout");
-        final String queueName = channel.queueDeclare().getQueue();
-        channel.queueBind(queueName, messageExchange.getName(), "");
-
-        final DeliverCallback deliverCallback = (consumerTag, delivery) -> {
-            final SCFJMessage message = SCFJMessage.deserialize(delivery.getBody());
-            log.trace("The following message has been received=" + message.toString());
-            handleMessage(message);
-        };
-
-        channel.basicConsume(queueName, true, deliverCallback, consumerTag -> {
-        });
+    private void registerShowElement() {
+        final Mqtt3Client client = brokerConnectionFactory.newConnection(name + "-" + id);
+        client.toBlocking().connect();
+        client.toAsync().subscribeWith()
+                .topicFilter(messageExchange.getName())
+                .qos(MqttQos.AT_LEAST_ONCE)
+                .callback(publish -> {
+                    try {
+                        final SCFJMessage message = SCFJMessage.deserialize(publish.getPayloadAsBytes());
+                        log.trace("The following message has been received=" + message.toString());
+                        handleMessage(message);
+                    } catch (final IOException e) {
+                        log.error("Failed to deserialize an incoming message on Show Element={}. {}", this.toString(), e.getMessage());
+                    }
+                })
+                .send();
     }
 
     protected void handleMessage(final SCFJMessage message) {
@@ -122,7 +125,18 @@ public abstract class ShowElement {
         executor.shutdownNow();
         shutdownProcedure();
         log.info("Shutdown was completed for Show Element={}", this.toString());
-        System.exit(0);
+        exitJvm(0);
+    }
+
+    /**
+     * Exits the JVM. A JDK 24+ SecurityManager can no longer intercept {@link System#exit(int)}
+     * (JEP 486), so this exists as a testable seam - override it in a test subclass to verify
+     * shutdown behavior without actually terminating the test JVM.
+     *
+     * @param status the exit status to pass to {@link System#exit(int)}.
+     */
+    protected void exitJvm(final int status) {
+        System.exit(status);
     }
 
     /**

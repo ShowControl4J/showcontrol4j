@@ -1,17 +1,15 @@
-version: "3.2"
 services:
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
+  mosquitto:
+    image: eclipse-mosquitto:2
     container_name: 'sc4j-message-broker'
     ports:
-      - 5672:5672
-      - 15672:15672
+      - 1883:1883
     expose:
-      - 5672
+      - 1883
     volumes:
-      - .config/rabbitmq/rabbitmq-isolated.conf:/etc/rabbitmq/rabbitmq.config
-      - ~/.showcontrol4j/.docker/rabbitmq/data/:/var/lib/rabbitmq/
-      - ~/.showcontrol4j/.docker/rabbitmq/log/:/var/log/rabbitmq
+      - .config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ~/.showcontrol4j/.docker/mosquitto/data/:/mosquitto/data
+      - ~/.showcontrol4j/.docker/mosquitto/log/:/mosquitto/log
     networks:
       - showcontrol4j_network
 networks:

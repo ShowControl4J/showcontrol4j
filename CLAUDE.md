@@ -26,8 +26,9 @@ Three Maven modules, plain `org.showcontrol4j.*` packages:
 
 - **`showcontrol4j-core`** — broker connection wrapper, message exchange,
   the `SCFJMessage`/`Instruction`/`ShowCommand` wire format. Everything else
-  depends on this module. (Migrating RabbitMQ → MQTT here — see roadmap
-  Phase 1; expect the broker/exchange classes to be in flux.)
+  depends on this module. Runs on MQTT (HiveMQ MQTT Client) as of the
+  RabbitMQ → MQTT migration — see `ROADMAP.md`'s Decision Log for what
+  changed and why.
 - **`showcontrol4j-element`** — the receiving side. `ShowElement` is the
   abstract base (state machine: idle loop / show loop / shutdown, driven by
   messages from the broker). Concrete elements (e.g.

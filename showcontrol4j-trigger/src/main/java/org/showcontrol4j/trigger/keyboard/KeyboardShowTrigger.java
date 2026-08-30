@@ -50,7 +50,7 @@ public class KeyboardShowTrigger extends ShowTrigger {
                     sendShutdownMessage();
                 } else if (entry.equalsIgnoreCase("EXIT")) {
                     log.info("EXIT has been pressed. Shutting down this Show Trigger={}", this.toString());
-                    System.exit(0);
+                    exitJvm(0);
                 }
             } catch (final IOException e) {
                 log.error("An exception occurred while running Show Trigger={}: {}", this.toString(), e);

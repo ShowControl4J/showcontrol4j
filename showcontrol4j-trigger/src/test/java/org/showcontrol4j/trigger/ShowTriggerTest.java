@@ -1,12 +1,12 @@
 package org.showcontrol4j.trigger;
 
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.impl.AMQImpl;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3BlockingClient;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import org.hamcrest.CoreMatchers;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.exchange.MessageExchange;
@@ -31,14 +31,7 @@ public class ShowTriggerTest {
     private MessageExchange mockMessageExchange;
     @Mock
     private BrokerConnectionFactory mockBrokerConnectionFactory;
-    @Mock
-    private Connection mockConnection;
-    @Mock
-    private Channel mockChannel;
-    @Mock
-    private AMQImpl.Exchange.DeclareOk mockExchangeDeclareOk;
-    @Mock
-    private AMQImpl.Queue.DeclareOk mockQueueDeclareOk;
+    private Mqtt3BlockingClient mockBlockingClient;
 
     @Before
     public void init() throws Exception {
@@ -56,19 +49,18 @@ public class ShowTriggerTest {
         };
 
         assertThat(showTrigger, CoreMatchers.instanceOf(ShowTrigger.class));
-        verify(mockBrokerConnectionFactory, times(1)).newConnection();
-        verify(mockChannel, times(1)).exchangeDeclare("test", "fanout");
-        verify(mockMessageExchange, times(1)).getName();
+        verify(mockBrokerConnectionFactory, times(1)).newConnection(anyString());
+        verify(mockBlockingClient, times(1)).connect();
         assertEquals(name, showTrigger.getName());
         assertEquals(id, showTrigger.getId());
         assertEquals(mockMessageExchange, showTrigger.getMessageExchange());
         assertEquals(mockBrokerConnectionFactory, showTrigger.getBrokerConnectionFactory());
-        assertEquals(mockChannel, showTrigger.getChannel());
+        assertEquals(mockBlockingClient, showTrigger.getClient());
         assertEquals(syncTimeout, showTrigger.getSyncTimeout());
     }
 
     @Test
-    public void testSetName() throws Exception {
+    public void testSetClient() throws Exception {
         final ShowTrigger showTrigger = new ShowTrigger(name, id, syncTimeout, mockMessageExchange, mockBrokerConnectionFactory) {
             @Override
             protected void startListener() {
@@ -76,9 +68,9 @@ public class ShowTriggerTest {
             }
         };
 
-        final Channel mockChannel2 = mock(Channel.class);
-        showTrigger.setChannel(mockChannel2);
-        assertEquals(mockChannel2, showTrigger.getChannel());
+        final Mqtt3BlockingClient mockClient2 = mock(Mqtt3BlockingClient.class);
+        showTrigger.setClient(mockClient2);
+        assertEquals(mockClient2, showTrigger.getClient());
     }
 
     @Test
@@ -91,7 +83,7 @@ public class ShowTriggerTest {
         };
 
         showTrigger.sendGoMessage();
-        verify(mockChannel, times(1)).basicPublish(eq("test"), eq(""), eq(null), any());
+        verify(mockBlockingClient.publishWith()).topic("test");
     }
 
     @Test
@@ -104,7 +96,7 @@ public class ShowTriggerTest {
         };
 
         showTrigger.sendIdleMessage();
-        verify(mockChannel, times(1)).basicPublish(eq("test"), eq(""), eq(null), any());
+        verify(mockBlockingClient.publishWith()).topic("test");
     }
 
     @Test
@@ -117,7 +109,7 @@ public class ShowTriggerTest {
         };
 
         showTrigger.sendShutdownMessage();
-        verify(mockChannel, times(1)).basicPublish(eq("test"), eq(""), eq(null), any());
+        verify(mockBlockingClient.publishWith()).topic("test");
     }
 
     @Test
@@ -135,11 +127,10 @@ public class ShowTriggerTest {
 
     //------------------------------------ HELPER METHODS ------------------------------------//
 
-    private void setupMockRules() throws Exception {
-        when(mockBrokerConnectionFactory.newConnection()).thenReturn(mockConnection);
-        when(mockConnection.createChannel()).thenReturn(mockChannel);
-        when(mockChannel.exchangeDeclare(anyString(), anyString())).thenReturn(mockExchangeDeclareOk);
-        when(mockChannel.queueDeclare()).thenReturn(mockQueueDeclareOk);
+    private void setupMockRules() {
+        final Mqtt3Client mockMqttClient = mock(Mqtt3Client.class, Mockito.RETURNS_DEEP_STUBS);
+        when(mockBrokerConnectionFactory.newConnection(anyString())).thenReturn(mockMqttClient);
+        mockBlockingClient = mockMqttClient.toBlocking();
         when(mockMessageExchange.getName()).thenReturn("test");
     }
 
