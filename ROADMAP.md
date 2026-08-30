@@ -22,6 +22,31 @@ original RabbitMQ/Pi4J V1 2021 implementations; see Decision Log.
 
 Dated, most recent first. Each entry: the decision, the reasoning, and status.
 
+### 2026-08-30 — Jackson and SLF4J bumped; Phase 1 (Toolchain Modernization) complete
+Last item on the Epic 1 task list (`bump-dependencies`): the two remaining
+outdated dependencies that hadn't been touched by the earlier
+JDK-25/Lombok/Mockito/JaCoCo work.
+
+**`jackson-databind`** (`showcontrol4j-core` only): 2.12.3 → 2.22.2, latest
+stable per Maven Central metadata. 2.12.3 predates several published CVEs in
+the 2.12.x/2.13.x line; no API usage in this codebase needed adjusting.
+
+**`slf4j-api` / `slf4j-simple`** (all three modules, driven by the shared
+`slf4j.version` property): 1.7.30 → 2.0.18 - a major-version jump. Checked
+Maven Central's "latest" metadata first and it pointed at `2.1.0-alpha1`;
+walked the full version list instead and picked 2.0.18 as the latest
+*stable* 2.x release rather than taking metadata "latest" at face value.
+SLF4J 2.x's API is source-compatible with 1.x for the subset used here
+(`Logger`/`LoggerFactory`, no fluent/2.x-only API adopted).
+
+**Verified**: full reactor build, `mvn -pl showcontrol4j-core,showcontrol4j-element,showcontrol4j-trigger -am clean install`
+under JDK 25 - BUILD SUCCESS, all 59 existing tests pass (25 core, 12
+trigger, 22 element) unchanged, confirming both bumps are drop-in.
+
+**Status**: with this merged, every Phase 1 checklist item is done - see the
+Phase 1 section above. Epic 1 (Toolchain Modernization) is complete;
+next up is Epic 2 (Core Library Expansion).
+
 ### 2026-08-30 — Release-to-Maven-Central workflow added (pulled forward from Phase 4)
 Requested ahead of where this roadmap had it sequenced - Phase 4's
 `setup-maven-central-portal` item. Built the automation now; the actual
@@ -509,15 +534,15 @@ Get the existing three modules onto a foundation that isn't already obsolete.
 - [x] Fail-safe watchdog: an element defaults to idle/off if it loses the broker
       connection, instead of freezing mid-state — see Decision Log 2026-08-30
 - [x] Java 11 → 25 LTS (Eclipse Temurin aarch64 builds on Pi) — see Decision Log
-      2026-08-30; `.travis.yml` still pins `openjdk11` and is now genuinely
-      broken, not just stale - left alone deliberately, `github-actions-ci` is
-      the task that replaces it rather than patching a CI config being removed
+      2026-08-30; `.travis.yml` is gone (deleted alongside `github-actions-ci`
+      below), so the "now genuinely broken" state this note used to flag no
+      longer exists
 - [x] Pin `maven-compiler-plugin` to a version supporting `--release 25` (3.13.0,
       done as a build-validation prerequisite for the Pi4J/MQTT work)
 - [x] Travis CI → GitHub Actions (build + test on push/PR) — see Decision Log 2026-08-30
-- [x] Lombok (≥1.18.42) and Mockito (5.23.0) bumped, all three modules, plus
-      JaCoCo (0.8.15) at the root — done as build-validation prerequisites,
-      not a deliberate pass; Jackson and SLF4J still on their original versions
+- [x] Lombok (≥1.18.42), Mockito (5.23.0), JaCoCo (0.8.15), and now Jackson
+      (2.22.2) and SLF4J (1.7.30 → 2.0.18, a major-version jump) all bumped,
+      all three modules — see Decision Log 2026-08-30. **Phase 1 complete.**
 
 ### Phase 2 — Core Library Expansion
 Go from "one trigger, one element" to a library that covers a themed attraction.
