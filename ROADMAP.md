@@ -49,12 +49,15 @@ fork of it) ever mattering for minutes:
 - `timeout-minutes: 10` - safety net against a hung job burning time
   unbounded; the actual build takes well under a minute.
 
-**Deliberately left out of scope**: Travis previously ran
-`coveralls:report` after tests. Re-establishing coverage reporting in
-GitHub Actions needs a Coveralls repo token as a GitHub secret - a
-decision and setup step for the repo owner, not something to fold silently
-into a "build + test" task. Revisit if/when coverage reporting is wanted
-back.
+**Coveralls removed, not just left out.** Travis previously ran
+`coveralls:report` after tests; since Travis itself was already dead and
+Coveralls has no purpose without it, `org.eluder.coveralls:coveralls-maven-plugin`
+was removed from the root `pom.xml` rather than carried forward unused.
+`jacoco-maven-plugin` stays - it's a general coverage-instrumentation tool,
+independent of Coveralls, and still useful on its own (e.g. a future local
+or CI coverage report). If coverage reporting to an external service is
+wanted again later, that's a fresh decision (which service, a repo token as
+a GitHub secret), not a revival of this specific integration.
 
 ### 2026-08-30 — Java target bump to 25 landed
 The actual `maven.compiler.source`/`target` bump the 2026-08-23 decision
