@@ -22,6 +22,63 @@ original RabbitMQ/Pi4J V1 2021 implementations; see Decision Log.
 
 Dated, most recent first. Each entry: the decision, the reasoning, and status.
 
+### 2026-08-30 — Local dev broker secured with auth + TLS
+Delivers the 2026-08-22 commitment to secure Mosquitto "from day one" -
+tracked separately from the RabbitMQ → MQTT migration above since it's a
+broker/deployment concern, not a client-code migration.
+
+**Broker side** (`setup/.config/mosquitto/mosquitto.conf`): both listeners
+(1883 plaintext, 8883 TLS) now require a username/password
+(`password_file`, `allow_anonymous false`); `per_listener_settings true` so
+that applies to each independently. 8883 additionally presents a
+certificate. Plaintext 1883 is kept for convenience on a genuinely trusted
+local network (e.g. the same machine) - prefer 8883 whenever the broker is
+reachable from anything else.
+
+**Certificates**: `setup/generate-dev-certs.sh` generates a self-signed CA +
+server certificate via `openssl` into `setup/.certs/` (gitignored - contains
+private keys, never commit it). Verified the script itself: ran it standalone,
+confirmed `openssl verify -CAfile ca.crt server.crt` passes and the SAN is
+set correctly, before wiring it into anything else.
+
+**Client side** (`BrokerConnectionFactory`): added `Builder.tls()` (trusts
+the JVM default trust store - for a real CA-issued cert) and
+`Builder.tls(File trustedCertificate)` (trusts only the given cert - for the
+self-signed dev cert above). Implemented as a custom `TrustManagerFactory`
+built from the certificate file, passed to HiveMQ's
+`MqttClientSslConfig.builder().trustManagerFactory(...)`. **Breaking-neutral
+addition** - existing callers unaffected, TLS is opt-in.
+
+**Setup docs**: new `setup/README.md` - the one-time password + certificate
+generation steps are mandatory before first `docker compose up` now (previously
+zero-setup). `docker-compose.yml` mounts the password file and `.certs/`
+directory, exposes 8883 alongside 1883.
+
+**Verification:** `BrokerConnectionFactoryTest` covers both `.tls()` and
+`.tls(File)` against a real test certificate (`src/test/resources/test-broker-ca.pem`
+- a throwaway public cert with no corresponding private key committed
+anywhere), verifying `Mqtt3ClientConfig.getSslConfig()`/`getTrustManagerFactory()`
+are actually populated, not just that the code compiles. Full module suite
+green (22/22, `showcontrol4j-core`).
+
+**Not verified - environment-blocked, not a config problem:** attempted a
+real end-to-end connection against a running Mosquitto broker twice, two
+different ways: (1) `docker compose up` - blocked, this sandbox's Docker
+daemon won't start (`ulimit: error setting limit (Operation not permitted)`,
+same restriction noted in the 2026-08-30 MQTT entry above); (2) installed
+`mosquitto`/`mosquitto-clients` directly via apt and tried running the
+broker binary against this exact config - blocked differently: the daemon
+got `EACCES` opening its own password/log files under `/tmp`, while plain
+`cat`/`touch` as the same root user succeeded on the identical paths
+immediately before - not a real Unix permissions problem, some sandbox
+policy stopping network-listening daemons specifically. Both attempts ruled
+out before giving up, not from a single failed try. **This means the actual
+TLS handshake and password auth against a live broker are unverified** -
+config and cert generation are correct by inspection and the OpenSSL-level
+checks above, but someone needs to run `docker compose up` in a normal
+(non-sandboxed) environment and do a real publish/subscribe before trusting
+this fully. **Status: settled**, pending that real-broker check.
+
 ### 2026-08-30 — RabbitMQ → MQTT migration completed across all three modules
 The 2026-08-22 decision below scoped this to `showcontrol4j-core` only. That
 was wrong: `ShowElement` and `ShowTrigger` called RabbitMQ's `Channel` API
@@ -264,7 +321,8 @@ Get the existing three modules onto a foundation that isn't already obsolete.
       modules, not just `showcontrol4j-core` — see Decision Log 2026-08-30
       for the corrected scope and what is/isn't confirmed (no real-broker
       test yet)
-- [ ] Mosquitto secured with auth + TLS from day one
+- [x] Mosquitto secured with auth + TLS from day one — see Decision Log
+      2026-08-30; real-broker verification still pending (sandbox-blocked, see entry)
 - [ ] Fail-safe watchdog: an element defaults to idle/off if it loses the broker
       connection, instead of freezing mid-state
 - [ ] Java 11 → 25 LTS (Eclipse Temurin aarch64 builds on Pi — see Decision Log) —

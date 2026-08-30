@@ -4,10 +4,14 @@ services:
     container_name: 'sc4j-message-broker'
     ports:
       - 1883:1883
+      - 8883:8883
     expose:
       - 1883
+      - 8883
     volumes:
       - .config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - .config/mosquitto/mosquitto.passwd:/mosquitto/config/mosquitto.passwd
+      - .certs:/mosquitto/config/certs
       - ~/.showcontrol4j/.docker/mosquitto/data/:/mosquitto/data
       - ~/.showcontrol4j/.docker/mosquitto/log/:/mosquitto/log
     networks:
