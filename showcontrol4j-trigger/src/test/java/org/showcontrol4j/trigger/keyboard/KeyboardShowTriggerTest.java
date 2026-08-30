@@ -1,15 +1,13 @@
 package org.showcontrol4j.trigger.keyboard;
 
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.impl.AMQImpl;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3BlockingClient;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import org.hamcrest.CoreMatchers;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.exchange.MessageExchange;
@@ -21,6 +19,7 @@ import java.util.concurrent.Executors;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -36,21 +35,12 @@ public class KeyboardShowTriggerTest {
     private final Long syncTimeout = 5000L;
     private final String triggerKey = "a";
     private ExecutorService executor;
+    private Mqtt3BlockingClient mockBlockingClient;
 
     @Mock
     private MessageExchange mockMessageExchange;
     @Mock
     private BrokerConnectionFactory mockBrokerConnectionFactory;
-    @Mock
-    private Connection mockConnection;
-    @Mock
-    private Channel mockChannel;
-    @Mock
-    private AMQImpl.Exchange.DeclareOk mockExchangeDeclareOk;
-    @Mock
-    private AMQImpl.Queue.DeclareOk mockQueueDeclareOk;
-    @Rule
-    public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
     @Before
     public void init() throws Exception {
@@ -76,7 +66,7 @@ public class KeyboardShowTriggerTest {
         assertEquals(syncTimeout, keyboardShowTrigger.getSyncTimeout());
         assertEquals(mockMessageExchange, keyboardShowTrigger.getMessageExchange());
         assertEquals(mockBrokerConnectionFactory, keyboardShowTrigger.getBrokerConnectionFactory());
-        assertEquals(mockChannel, keyboardShowTrigger.getChannel());
+        assertEquals(mockBlockingClient, keyboardShowTrigger.getClient());
         assertThat(keyboardShowTrigger.getScanner(), CoreMatchers.instanceOf(Scanner.class));
     }
 
@@ -93,7 +83,7 @@ public class KeyboardShowTriggerTest {
 
         executor.submit(new TestTask(keyboardShowTrigger));
         Thread.sleep(500);
-        verify(mockChannel, atLeast(1)).basicPublish(eq("test"), eq(""), eq(null), any());
+        verify(mockBlockingClient.publishWith(), atLeast(1)).topic("test");
     }
 
     @Test
@@ -109,7 +99,7 @@ public class KeyboardShowTriggerTest {
 
         executor.submit(new TestTask(keyboardShowTrigger));
         Thread.sleep(500);
-        verify(mockChannel, atLeast(1)).basicPublish(eq("test"), eq(""), eq(null), any());
+        verify(mockBlockingClient.publishWith(), atLeast(1)).topic("test");
     }
 
     @Test
@@ -125,23 +115,37 @@ public class KeyboardShowTriggerTest {
 
         executor.submit(new TestTask(keyboardShowTrigger));
         Thread.sleep(1000);
-        verify(mockChannel, atLeast(1)).basicPublish(eq("test"), eq(""), eq(null), any());
+        verify(mockBlockingClient.publishWith(), atLeast(1)).topic("test");
     }
 
     @Test
     public void testStartListener_exit() throws Exception {
+        final boolean[] exited = {false};
+        final int[] exitStatus = {-1};
+
         final KeyboardShowTrigger keyboardShowTrigger = new KeyboardShowTrigger(triggerKey, name, id, syncTimeout,
-                mockMessageExchange, mockBrokerConnectionFactory);
+                mockMessageExchange, mockBrokerConnectionFactory) {
+            @Override
+            protected void exitJvm(final int status) {
+                exited[0] = true;
+                exitStatus[0] = status;
+                // Prevent startListener()'s infinite loop from spinning after "exit" - mirrors
+                // the JVM actually terminating here, without needing a real System.exit(int).
+                throw new StopListenerLoop();
+            }
+        };
         final Scanner mockScanner = mock(Scanner.class);
         when(mockScanner.next()).thenReturn("EXIT");
 
-        final Field scannerField = keyboardShowTrigger.getClass().getDeclaredField("scanner");
+        final Field scannerField = KeyboardShowTrigger.class.getDeclaredField("scanner");
         scannerField.setAccessible(true);
         scannerField.set(keyboardShowTrigger, mockScanner);
 
-        exit.expectSystemExitWithStatus(0);
         executor.submit(new TestTask(keyboardShowTrigger));
-        Thread.sleep(1000); // pause to give the system a chance to exit
+        Thread.sleep(1000); // pause to give the listener a chance to process "EXIT"
+
+        assertTrue(exited[0]);
+        assertEquals(0, exitStatus[0]);
     }
 
     @Test
@@ -156,12 +160,19 @@ public class KeyboardShowTriggerTest {
 
     //------------------------------------ HELPER METHODS ------------------------------------//
 
-    private void setupMockRules() throws Exception {
-        when(mockBrokerConnectionFactory.newConnection()).thenReturn(mockConnection);
-        when(mockConnection.createChannel()).thenReturn(mockChannel);
-        when(mockChannel.exchangeDeclare(anyString(), anyString())).thenReturn(mockExchangeDeclareOk);
-        when(mockChannel.queueDeclare()).thenReturn(mockQueueDeclareOk);
+    private void setupMockRules() {
+        final Mqtt3Client mockMqttClient = mock(Mqtt3Client.class, Mockito.RETURNS_DEEP_STUBS);
+        when(mockBrokerConnectionFactory.newConnection(anyString())).thenReturn(mockMqttClient);
+        mockBlockingClient = mockMqttClient.toBlocking();
         when(mockMessageExchange.getName()).thenReturn("test");
+    }
+
+    /**
+     * Thrown from the {@code exitJvm} override in {@code testStartListener_exit} to unwind out of
+     * {@link KeyboardShowTrigger#startListener()}'s infinite loop, standing in for the JVM
+     * termination a real {@code System.exit()} would cause.
+     */
+    private static class StopListenerLoop extends RuntimeException {
     }
 
     private class TestTask implements Runnable {
@@ -174,7 +185,11 @@ public class KeyboardShowTriggerTest {
 
         @Override
         public void run() {
-            trigger.startListener();
+            try {
+                trigger.startListener();
+            } catch (final StopListenerLoop e) {
+                // expected - see StopListenerLoop's javadoc.
+            }
         }
     }
 

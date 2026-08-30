@@ -1,16 +1,13 @@
 package org.showcontrol4j.element;
 
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.impl.AMQImpl;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import junit.framework.TestCase;
 import org.hamcrest.CoreMatchers;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.exchange.MessageExchange;
@@ -18,18 +15,17 @@ import org.showcontrol4j.message.Instruction;
 import org.showcontrol4j.message.SCFJMessage;
 import org.showcontrol4j.message.ShowCommand;
 
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -50,18 +46,6 @@ public class ShowElementTest {
     private MessageExchange mockMessageExchange;
     @Mock
     private BrokerConnectionFactory mockBrokerConnectionFactory;
-    @Mock
-    private Connection mockConnection;
-    @Mock
-    private Channel mockChannel;
-    @Mock
-    private AMQImpl.Exchange.DeclareOk mockExchangeDeclareOk;
-    @Mock
-    private AMQImpl.Queue.BindOk mockBindOk;
-    @Mock
-    private AMQImpl.Queue.DeclareOk mockQueueDeclareOk;
-    @Rule
-    public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
     @Before
     public void init() {
@@ -282,6 +266,7 @@ public class ShowElementTest {
     public void testHandleMessage_shutdownMessage() throws Exception {
         setupMockRules();
         final boolean[] ranShutdownProcedure = {false};
+        final int[] exitStatus = {-1};
 
         final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
             @Override
@@ -298,15 +283,20 @@ public class ShowElementTest {
             public void shutdownProcedure() {
                 ranShutdownProcedure[0] = true;
             }
+
+            @Override
+            protected void exitJvm(final int status) {
+                exitStatus[0] = status;
+            }
         };
 
         showElement.init();
 
-        exit.expectSystemExitWithStatus(0);
         executor.submit(new TestTask(showElement, testShutdownSCFJMessage));
         TimeUnit.MILLISECONDS.sleep(1000);
 
         assertTrue(ranShutdownProcedure[0]);
+        assertEquals(0, exitStatus[0]);
 
         shutdownExecutorOnShowElementBase(showElement);
     }
@@ -338,13 +328,15 @@ public class ShowElementTest {
 
     //------------------------------------ HELPER METHODS ------------------------------------//
 
-    private void setupMockRules() throws IOException, TimeoutException {
-        when(mockBrokerConnectionFactory.newConnection()).thenReturn(mockConnection);
-        when(mockConnection.createChannel()).thenReturn(mockChannel);
-        when(mockChannel.exchangeDeclare(anyString(), anyString())).thenReturn(mockExchangeDeclareOk);
-        when(mockChannel.queueDeclare()).thenReturn(mockQueueDeclareOk);
-        when(mockQueueDeclareOk.getQueue()).thenReturn("test");
-        when(mockChannel.queueBind(anyString(), anyString(), anyString())).thenReturn(mockBindOk);
+    /**
+     * Stubs {@link BrokerConnectionFactory#newConnection(String)} to return a deep-stubbed MQTT
+     * client mock, so that {@link ShowElement#init()}'s connect/subscribe chain succeeds without
+     * needing to hand-mock every stage of HiveMQ's fluent builder API.
+     */
+    private void setupMockRules() {
+        final Mqtt3Client mockMqttClient = mock(Mqtt3Client.class, Mockito.RETURNS_DEEP_STUBS);
+        when(mockBrokerConnectionFactory.newConnection(anyString())).thenReturn(mockMqttClient);
+        when(mockMessageExchange.getName()).thenReturn("test");
     }
 
     private static Method getHandleMessageMethod() {

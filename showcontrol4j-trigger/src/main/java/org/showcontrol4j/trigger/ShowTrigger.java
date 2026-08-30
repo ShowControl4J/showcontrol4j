@@ -1,15 +1,17 @@
 package org.showcontrol4j.trigger;
 
-import com.rabbitmq.client.Channel;
+import com.hivemq.client.mqtt.datatypes.MqttQos;
+import com.hivemq.client.mqtt.exceptions.ConnectionFailedException;
+import com.hivemq.client.mqtt.mqtt3.Mqtt3BlockingClient;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.exchange.MessageExchange;
+import org.showcontrol4j.message.SCFJMessage;
 import org.showcontrol4j.message.ShowCommand;
 
 import java.io.IOException;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Serves as the parent class for all Show Triggers. When creating a child class, the {@link ShowTrigger#startListener()}
@@ -31,7 +33,7 @@ public abstract class ShowTrigger {
     private final BrokerConnectionFactory brokerConnectionFactory;
     @ToString.Include
     private final Long syncTimeout;
-    private Channel channel;
+    private Mqtt3BlockingClient client;
 
     public ShowTrigger(final String showTriggerName, final Long showTriggerId, final Long syncTimeout,
                        final MessageExchange messageExchange, final BrokerConnectionFactory brokerConnectionFactory) {
@@ -42,14 +44,14 @@ public abstract class ShowTrigger {
         this.syncTimeout = syncTimeout;
         try {
             registerShowTrigger();
-        } catch (final IOException | TimeoutException e) {
-            System.out.println("An error occurred while registering the show element. " + e.getCause());
+        } catch (final ConnectionFailedException e) {
+            System.out.println("An error occurred while registering the show element. " + e.getMessage());
         }
     }
 
-    private void registerShowTrigger() throws IOException, TimeoutException {
-        channel = brokerConnectionFactory.newConnection().createChannel();
-        channel.exchangeDeclare(messageExchange.getName(), "fanout");
+    private void registerShowTrigger() {
+        client = brokerConnectionFactory.newConnection(name + "-" + id).toBlocking();
+        client.connect();
     }
 
     /**
@@ -58,16 +60,33 @@ public abstract class ShowTrigger {
     protected abstract void startListener();
 
     protected void sendGoMessage() throws IOException {
-        channel.basicPublish(messageExchange.getName(), "", null,
-                ShowCommand.GO(syncTimeout != null ? syncTimeout : 0L).serialize());
+        publish(ShowCommand.GO(syncTimeout != null ? syncTimeout : 0L));
     }
 
     protected void sendIdleMessage() throws IOException {
-        channel.basicPublish(messageExchange.getName(), "", null,
-                ShowCommand.IDLE(syncTimeout != null ? syncTimeout : 0L).serialize());
+        publish(ShowCommand.IDLE(syncTimeout != null ? syncTimeout : 0L));
     }
 
     protected void sendShutdownMessage() throws IOException {
-        channel.basicPublish(messageExchange.getName(), "", null, ShowCommand.SHUTDOWN().serialize());
+        publish(ShowCommand.SHUTDOWN());
+    }
+
+    private void publish(final SCFJMessage message) throws IOException {
+        client.publishWith()
+                .topic(messageExchange.getName())
+                .payload(message.serialize())
+                .qos(MqttQos.AT_LEAST_ONCE)
+                .send();
+    }
+
+    /**
+     * Exits the JVM. A JDK 24+ SecurityManager can no longer intercept {@link System#exit(int)}
+     * (JEP 486), so this exists as a testable seam - override it in a test subclass to verify
+     * exit behavior without actually terminating the test JVM.
+     *
+     * @param status the exit status to pass to {@link System#exit(int)}.
+     */
+    protected void exitJvm(final int status) {
+        System.exit(status);
     }
 }
