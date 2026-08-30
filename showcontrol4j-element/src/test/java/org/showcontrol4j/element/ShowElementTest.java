@@ -1,11 +1,15 @@
 package org.showcontrol4j.element;
 
+import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedContext;
+import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedListener;
+import com.hivemq.client.mqtt.lifecycle.MqttDisconnectSource;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import junit.framework.TestCase;
 import org.hamcrest.CoreMatchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
@@ -24,8 +28,10 @@ import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -302,6 +308,96 @@ public class ShowElementTest {
     }
 
     @Test
+    public void testConnectionWatchdog_unexpectedDisconnect_defaultsToIdle() throws Exception {
+        setupMockRules();
+        final boolean[] ranShowSequence = {false};
+        final boolean[] ranIdleLoop = {false};
+
+        final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
+            @Override
+            public void showSequence() throws InterruptedException {
+                ranShowSequence[0] = true;
+                while (true) {
+                    // hold in the show state until interrupted, so the watchdog has something to interrupt.
+                }
+            }
+
+            @Override
+            public void idleLoop() throws InterruptedException {
+                ranIdleLoop[0] = true;
+                while (true) {
+                    // hold in the idle state so the assertion below isn't racing a second call.
+                }
+            }
+
+            @Override
+            public void shutdownProcedure() {
+                // do nothing
+            }
+        };
+
+        showElement.init();
+        executor.submit(new TestTask(showElement, testGoSCFJMessage));
+        TimeUnit.MILLISECONDS.sleep(500);
+        assertTrue(ranShowSequence[0]);
+        ranIdleLoop[0] = false; // reset the IDLE run() already did as part of init()
+
+        final MqttClientDisconnectedListener disconnectedListener = capturedDisconnectedListener(mockBrokerConnectionFactory);
+        disconnectedListener.onDisconnected(mockDisconnectedContext(MqttDisconnectSource.SERVER));
+        TimeUnit.MILLISECONDS.sleep(500);
+
+        assertTrue(ranIdleLoop[0]);
+
+        shutdownExecutorOnShowElementBase(showElement);
+    }
+
+    @Test
+    public void testConnectionWatchdog_userInitiatedDisconnect_doesNotTriggerFailSafe() throws Exception {
+        setupMockRules();
+        final boolean[] ranShowSequence = {false};
+        final boolean[] ranIdleLoop = {false};
+
+        final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
+            @Override
+            public void showSequence() throws InterruptedException {
+                ranShowSequence[0] = true;
+                while (true) {
+                    // hold in the show state - a USER-sourced disconnect should not interrupt this.
+                }
+            }
+
+            @Override
+            public void idleLoop() throws InterruptedException {
+                ranIdleLoop[0] = true;
+                while (true) {
+                    // hold in the idle state so a later, spurious re-entry would be detectable -
+                    // the initial IDLE run from init() is expected to land here and stay.
+                }
+            }
+
+            @Override
+            public void shutdownProcedure() {
+                // do nothing
+            }
+        };
+
+        showElement.init();
+        TimeUnit.MILLISECONDS.sleep(200); // let the initial IDLE run from init() land in idleLoop()
+        executor.submit(new TestTask(showElement, testGoSCFJMessage));
+        TimeUnit.MILLISECONDS.sleep(500);
+        assertTrue(ranShowSequence[0]);
+        ranIdleLoop[0] = false; // reset - only a fresh idleLoop() entry should flip this back to true
+
+        final MqttClientDisconnectedListener disconnectedListener = capturedDisconnectedListener(mockBrokerConnectionFactory);
+        disconnectedListener.onDisconnected(mockDisconnectedContext(MqttDisconnectSource.USER));
+        TimeUnit.MILLISECONDS.sleep(500);
+
+        assertFalse(ranIdleLoop[0]);
+
+        shutdownExecutorOnShowElementBase(showElement);
+    }
+
+    @Test
     public void testToString() throws Exception {
         setupMockRules();
 
@@ -329,14 +425,32 @@ public class ShowElementTest {
     //------------------------------------ HELPER METHODS ------------------------------------//
 
     /**
-     * Stubs {@link BrokerConnectionFactory#newConnection(String)} to return a deep-stubbed MQTT
-     * client mock, so that {@link ShowElement#init()}'s connect/subscribe chain succeeds without
-     * needing to hand-mock every stage of HiveMQ's fluent builder API.
+     * Stubs {@link BrokerConnectionFactory#newConnection(String, MqttClientDisconnectedListener)} to
+     * return a deep-stubbed MQTT client mock, so that {@link ShowElement#init()}'s connect/subscribe
+     * chain succeeds without needing to hand-mock every stage of HiveMQ's fluent builder API.
      */
     private void setupMockRules() {
         final Mqtt3Client mockMqttClient = mock(Mqtt3Client.class, Mockito.RETURNS_DEEP_STUBS);
-        when(mockBrokerConnectionFactory.newConnection(anyString())).thenReturn(mockMqttClient);
+        when(mockBrokerConnectionFactory.newConnection(anyString(), any())).thenReturn(mockMqttClient);
         when(mockMessageExchange.getName()).thenReturn("test");
+    }
+
+    /**
+     * Captures the {@link MqttClientDisconnectedListener} that {@code showElement} registered via
+     * {@link BrokerConnectionFactory#newConnection(String, MqttClientDisconnectedListener)} during
+     * {@link ShowElement#init()}, so a test can simulate a broker disconnect by invoking it directly.
+     */
+    private static MqttClientDisconnectedListener capturedDisconnectedListener(final BrokerConnectionFactory mockBrokerConnectionFactory) {
+        final ArgumentCaptor<MqttClientDisconnectedListener> listenerCaptor = ArgumentCaptor.forClass(MqttClientDisconnectedListener.class);
+        verify(mockBrokerConnectionFactory).newConnection(anyString(), listenerCaptor.capture());
+        return listenerCaptor.getValue();
+    }
+
+    private static MqttClientDisconnectedContext mockDisconnectedContext(final MqttDisconnectSource source) {
+        final MqttClientDisconnectedContext mockContext = mock(MqttClientDisconnectedContext.class);
+        when(mockContext.getSource()).thenReturn(source);
+        when(mockContext.getCause()).thenReturn(new RuntimeException("simulated disconnect"));
+        return mockContext;
     }
 
     private static Method getHandleMessageMethod() {

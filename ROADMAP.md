@@ -22,6 +22,45 @@ original RabbitMQ/Pi4J V1 2021 implementations; see Decision Log.
 
 Dated, most recent first. Each entry: the decision, the reasoning, and status.
 
+### 2026-08-30 — Fail-safe connection watchdog added to ShowElement
+Delivers the Phase 1 "fail-safe watchdog" item: a Show Element now defaults to
+idle, rather than staying frozen in whatever it was doing, when it
+unexpectedly loses its broker connection.
+
+**`BrokerConnectionFactory`**: added `newConnection(String, MqttClientDisconnectedListener)`
+alongside the existing single-arg overload (kept, unchanged, still used by
+`ShowTrigger`) - registers the given listener on the client before building
+it, since HiveMQ only accepts disconnect listeners at build time, not on an
+already-built client. Both overloads now enable
+`automaticReconnectWithDefaultConfig()` - a watchdog that goes idle but never
+tries to reconnect just leaves the show permanently stuck, so this applies
+uniformly rather than only where a listener is also supplied.
+
+**`ShowElement`**: `registerShowElement()` now passes a listener that calls
+`handleMessage(IDLE)` on disconnect - but only when
+`MqttClientDisconnectedContext.getSource() != MqttDisconnectSource.USER`, i.e.
+only for a connection lost unexpectedly (network drop, broker restart, auth
+failure), not one this client ended itself. `showcontrol4j-trigger` was
+deliberately left out of this - the roadmap item scoped this to elements, and
+a trigger publishing sporadically on a button press doesn't carry the same
+"frozen mid-state" hazard an element does.
+
+**Verification:** both branches - unexpected disconnect while mid-show-loop
+(defaults to idle) and a `USER`-sourced disconnect (does not) - are covered in
+`ShowElementTest`, simulated by capturing the listener `BrokerConnectionFactory`
+was called with and invoking it directly with a mocked
+`MqttClientDisconnectedContext`. Caught and fixed a real bug in my own first
+draft of the second test along the way: a non-blocking `idleLoop()` override
+left `init()`'s original idle-loop thread running forever in the background
+(matches this codebase's existing cooperative-interruption behavior - a
+non-blocking `idleLoop()` never actually stops once `runIdleLoop()`'s `while
+(true)` starts calling it), which made the assertion pass for the wrong
+reason. Full reactor green (59/59) after the fix. Real-broker verification -
+does a live Mosquitto connection actually fire `SERVER`/`CLIENT`-sourced
+disconnects the way this assumes - is scheduled for Phase 3 (Reference
+Build), where real hardware and a real broker are already in the loop.
+**Status: settled.**
+
 ### 2026-08-30 — Local dev broker secured with auth + TLS
 Delivers the 2026-08-22 commitment to secure Mosquitto "from day one" -
 tracked separately from the RabbitMQ → MQTT migration above since it's a
@@ -323,8 +362,8 @@ Get the existing three modules onto a foundation that isn't already obsolete.
       test yet)
 - [x] Mosquitto secured with auth + TLS from day one — see Decision Log
       2026-08-30; real-broker verification still pending (sandbox-blocked, see entry)
-- [ ] Fail-safe watchdog: an element defaults to idle/off if it loses the broker
-      connection, instead of freezing mid-state
+- [x] Fail-safe watchdog: an element defaults to idle/off if it loses the broker
+      connection, instead of freezing mid-state — see Decision Log 2026-08-30
 - [ ] Java 11 → 25 LTS (Eclipse Temurin aarch64 builds on Pi — see Decision Log) —
       prerequisite tooling (Lombok, compiler-plugin, Mockito, JaCoCo) already
       bumped as a side effect of validating other work; the actual module

@@ -2,6 +2,8 @@ package org.showcontrol4j.element;
 
 import com.hivemq.client.mqtt.datatypes.MqttQos;
 import com.hivemq.client.mqtt.exceptions.ConnectionFailedException;
+import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedContext;
+import com.hivemq.client.mqtt.lifecycle.MqttDisconnectSource;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3Client;
 import lombok.Getter;
 import lombok.Setter;
@@ -58,7 +60,7 @@ public abstract class ShowElement {
     }
 
     private void registerShowElement() {
-        final Mqtt3Client client = brokerConnectionFactory.newConnection(name + "-" + id);
+        final Mqtt3Client client = brokerConnectionFactory.newConnection(name + "-" + id, this::defaultToIdleOnUnexpectedDisconnect);
         client.toBlocking().connect();
         client.toAsync().subscribeWith()
                 .topicFilter(messageExchange.getName())
@@ -73,6 +75,19 @@ public abstract class ShowElement {
                     }
                 })
                 .send();
+    }
+
+    /**
+     * Fail-safe watchdog: defaults this Show Element to idle when the broker connection is lost
+     * unexpectedly, rather than leaving it frozen mid-state while automatic reconnection is in
+     * progress. Not triggered by a disconnect this client itself initiated.
+     */
+    private void defaultToIdleOnUnexpectedDisconnect(final MqttClientDisconnectedContext context) {
+        if (context.getSource() != MqttDisconnectSource.USER) {
+            log.error("Lost connection to the broker for Show Element={}, defaulting to idle until it reconnects. {}",
+                    this.toString(), context.getCause() != null ? context.getCause().getMessage() : "unknown cause");
+            handleMessage(SCFJMessage.builder().instruction(Instruction.IDLE).build());
+        }
     }
 
     protected void handleMessage(final SCFJMessage message) {
