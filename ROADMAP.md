@@ -22,6 +22,40 @@ original RabbitMQ/Pi4J V1 2021 implementations; see Decision Log.
 
 Dated, most recent first. Each entry: the decision, the reasoning, and status.
 
+### 2026-08-30 — Travis CI replaced with GitHub Actions
+`.github/workflows/build.yml`: single job, `ubuntu-latest`, Temurin 25,
+`mvn -B clean install` builds and tests all three modules in one pass via
+the reactor. Triggers on push to `main` and all pull request activity.
+`.travis.yml` deleted (Travis's free tier for open source hasn't worked
+since ~2021 - this isn't losing working CI, it's replacing CI that's
+already been silently dead). README badge swapped to point at the new
+workflow.
+
+**Checked before designing this**: confirmed via the GitHub API that this
+repo is public (`"private": false`). GitHub Actions on standard GitHub-hosted
+runners is free and unlimited for public repositories - the commonly-cited
+2,000 minutes/month cap is specifically the private-repo Free-plan
+allowance, and doesn't apply here. Designed lean anyway, since it's good
+practice regardless and protects against the repo (or someone's private
+fork of it) ever mattering for minutes:
+- One job, one OS, no matrix - nothing here needs cross-platform or
+  cross-JDK-version testing yet.
+- `cache: maven` (built into `actions/setup-java`) caches `~/.m2/repository`
+  keyed on `pom.xml` hashes, so dependency resolution isn't repeated (and
+  re-downloaded) on every run.
+- `concurrency` + `cancel-in-progress: true` - a new push to the same branch
+  or PR cancels the run it superseded, rather than letting a stale run
+  finish.
+- `timeout-minutes: 10` - safety net against a hung job burning time
+  unbounded; the actual build takes well under a minute.
+
+**Deliberately left out of scope**: Travis previously ran
+`coveralls:report` after tests. Re-establishing coverage reporting in
+GitHub Actions needs a Coveralls repo token as a GitHub secret - a
+decision and setup step for the repo owner, not something to fold silently
+into a "build + test" task. Revisit if/when coverage reporting is wanted
+back.
+
 ### 2026-08-30 — Java target bump to 25 landed
 The actual `maven.compiler.source`/`target` bump the 2026-08-23 decision
 called for. Smaller than it might look: Lombok, `maven-compiler-plugin`,
@@ -402,7 +436,7 @@ Get the existing three modules onto a foundation that isn't already obsolete.
       the task that replaces it rather than patching a CI config being removed
 - [x] Pin `maven-compiler-plugin` to a version supporting `--release 25` (3.13.0,
       done as a build-validation prerequisite for the Pi4J/MQTT work)
-- [ ] Travis CI → GitHub Actions (build + test on push/PR)
+- [x] Travis CI → GitHub Actions (build + test on push/PR) — see Decision Log 2026-08-30
 - [x] Lombok (≥1.18.42) and Mockito (5.23.0) bumped, all three modules, plus
       JaCoCo (0.8.15) at the root — done as build-validation prerequisites,
       not a deliberate pass; Jackson and SLF4J still on their original versions

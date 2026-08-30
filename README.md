@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-    <a href="https://travis-ci.com/ShowControl4J/showcontrol4j">
-        <img src="https://travis-ci.com/ShowControl4J/showcontrol4j.svg?branch=main" alt="build status"></a>
+    <a href="https://github.com/ShowControl4J/showcontrol4j/actions/workflows/build.yml">
+        <img src="https://github.com/ShowControl4J/showcontrol4j/actions/workflows/build.yml/badge.svg" alt="build status"></a>
   <a href="https://github.com/ShowControl4J/showcontrol4j/blob/main/LICENSE">
         <img src="https://img.shields.io/github/license/showcontrol4j/showcontrol4j" alt="license info"></a>
     <a href="https://discord.gg/D9FBxsW8Gq">
