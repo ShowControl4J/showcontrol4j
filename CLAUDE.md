@@ -58,6 +58,23 @@ interfaces) and say explicitly in the PR what was and wasn't verified
 against real hardware — see the PR template's "How has it been tested?"
 section. Don't claim hardware-level testing you didn't do.
 
+## CI and releases
+
+`.github/workflows/build.yml` runs on every push to `main`/`master` and
+every pull request — `mvn -B clean install`, nothing else. It doesn't sign
+or publish anything; the `release` Maven profile it runs under is never
+active there.
+
+`.github/workflows/release.yml` is manual only (`workflow_dispatch`) and is
+the only thing that publishes to Maven Central. It reads the current
+version, strips `-SNAPSHOT`, builds and tests that exact version, and only
+if that passes does it commit, tag, publish, and bump to the next
+`-SNAPSHOT` — nobody hand-types a version number. See `ROADMAP.md`'s
+Decision Log (2026-08-30) for the full design and, importantly, the list of
+external prerequisites (Central Portal account, GPG key, repo secrets) that
+have to exist before this workflow can actually succeed — don't assume it's
+live just because the file exists.
+
 ## Conventions already in use — follow them
 
 - Lombok for boilerplate (`@Getter`/`@Setter`/`@Builder`/`@Data`/`@Slf4j`),
