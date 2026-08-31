@@ -60,7 +60,17 @@ public abstract class ShowTrigger {
     protected abstract void startListener();
 
     protected void sendGoMessage() throws IOException {
-        publish(ShowCommand.GO(syncTimeout != null ? syncTimeout : 0L));
+        sendGoMessage(null);
+    }
+
+    /**
+     * Sends a GO message naming which cue the receiving Show Elements should run.
+     *
+     * @param cueId the id of the cue to run, or {@code null} for a Show Element's default sequence.
+     * @throws IOException if the message could not be published.
+     */
+    protected void sendGoMessage(final String cueId) throws IOException {
+        publish(ShowCommand.GO(syncTimeout != null ? syncTimeout : 0L, cueId));
     }
 
     protected void sendIdleMessage() throws IOException {

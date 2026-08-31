@@ -22,6 +22,53 @@ original RabbitMQ/Pi4J V1 2021 implementations; see Decision Log.
 
 Dated, most recent first. Each entry: the decision, the reasoning, and status.
 
+### 2026-08-31 — Cue/timeline abstraction added (Phase 2, first item)
+First Phase 2 item: the biggest functional gap flagged when this roadmap was
+written - a single opaque `GO` broadcast can't express a sequenced, timed
+show. Two additive, backward-compatible pieces, both in `showcontrol4j-core`:
+
+**Named cues on the wire.** `SCFJMessage` gained an optional `cueId` field
+(`String`, nullable). `ShowCommand.GO(Long)` still exists unchanged and
+defaults `cueId` to `null`; a new `ShowCommand.GO(Long syncTimeout, String cueId)`
+overload names a cue. `null` means "the default, unnamed sequence" - a Show
+Element that never opts in behaves exactly as before.
+
+**`org.showcontrol4j.timeline` package**: `Timeline` is an ordered list of
+`TimelineAction`s, each with an offset in milliseconds from when the timeline
+starts; `Timeline.play()` waits out each offset and runs the action, and
+propagates `InterruptedException` immediately so an in-progress cue cancels
+cleanly when a new command arrives - the same cancellation contract
+`showSequence()` already had. Built via `Timeline.builder().at(offsetMillis, action)...build()`,
+which sorts events by offset so a builder call doesn't have to add them in
+order. Kept as a hand-written immutable class with a custom builder, not a
+`@Builder`/`@Data` POJO - it holds behavior (actions, `play()`), not just
+data, and doesn't need Jackson (de)serialization the way `SCFJMessage` does.
+
+**`ShowElement` integration**: a protected `registerCue(String cueId, Timeline timeline)`
+lets a subclass register any number of named cues (typically from its
+constructor). On a `GO`, if the message's `cueId` matches a registered cue,
+that `Timeline` plays; otherwise it falls back to the existing abstract
+`showSequence()` - so `GeneralPurposeIOShowElement` and any other element
+that hasn't adopted cues needs zero changes, and a `GO` naming an unrecognized
+cue degrades to the default sequence instead of silently doing nothing.
+
+**`ShowTrigger` integration**: `sendGoMessage()` is unchanged (sends `cueId=null`);
+a new `sendGoMessage(String cueId)` overload names a cue to run.
+
+**Verified**: full reactor build under JDK 25 - all 70 tests pass (33 core,
+13 trigger, 24 element), including new coverage for offset ordering, wait
+timing, interruption, and replay on `Timeline`, cue selection and unknown-cue
+fallback on `ShowElement`, and the new `ShowCommand`/`ShowTrigger` overloads.
+No real-broker or hardware verification for this change - it's pure
+message-format and control-flow, doesn't touch `BrokerConnectionFactory` or
+GPIO code, so nothing here changes the Phase 3 (Reference Build) verification
+plan.
+
+**Deliberately out of scope for this item**: multi-element show sequencing
+(a "show" spanning several Show Elements with cross-element sync beyond the
+existing `syncTimeout`), a DSL or file format for authoring timelines, and
+runtime cue discovery/listing. Those are separate Phase 2 items or later.
+
 ### 2026-08-30 — Jackson and SLF4J bumped; Phase 1 (Toolchain Modernization) complete
 Last item on the Epic 1 task list (`bump-dependencies`): the two remaining
 outdated dependencies that hadn't been touched by the earlier
@@ -546,8 +593,9 @@ Get the existing three modules onto a foundation that isn't already obsolete.
 
 ### Phase 2 — Core Library Expansion
 Go from "one trigger, one element" to a library that covers a themed attraction.
-- [ ] Cue/timeline abstraction — biggest functional gap: real show control needs
-      sequenced, timed cues, not just a single GO broadcast
+- [x] Cue/timeline abstraction — biggest functional gap: real show control needs
+      sequenced, timed cues, not just a single GO broadcast — see Decision Log
+      2026-08-31
 - [ ] Triggers: IR break-beam, PIR motion, RFID/NFC
 - [ ] Elements: servo, relay/solenoid, DMX512 output, audio playback
 - [ ] ESP32/Arduino-compatible client (opens up cheap effect nodes)

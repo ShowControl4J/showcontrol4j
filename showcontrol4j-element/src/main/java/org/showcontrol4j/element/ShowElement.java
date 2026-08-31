@@ -13,8 +13,10 @@ import org.showcontrol4j.broker.BrokerConnectionFactory;
 import org.showcontrol4j.exchange.MessageExchange;
 import org.showcontrol4j.message.Instruction;
 import org.showcontrol4j.message.SCFJMessage;
+import org.showcontrol4j.timeline.Timeline;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.*;
 
 /**
@@ -38,6 +40,7 @@ public abstract class ShowElement {
     private final MessageExchange messageExchange;
     private final BrokerConnectionFactory brokerConnectionFactory;
     private final ExecutorService executor;
+    private final Map<String, Timeline> cues = new ConcurrentHashMap<>();
     private Future runningFuture;
 
     public ShowElement(final String name, final Long id, final MessageExchange messageExchange,
@@ -57,6 +60,18 @@ public abstract class ShowElement {
         }
         log.info("Initialized Show Element={}", this.toString());
         handleMessage(SCFJMessage.builder().instruction(Instruction.IDLE).build());
+    }
+
+    /**
+     * Registers a {@link Timeline} under a cue id. When a GO message naming this cue id is received,
+     * this timeline is played instead of {@link #showSequence()} - see {@link #runShowLoop(String)}.
+     * Typically called from a subclass constructor to set up every cue it supports.
+     *
+     * @param cueId the cue id a GO message must carry to select this timeline.
+     * @param timeline the {@link Timeline} to play for this cue.
+     */
+    protected final void registerCue(final String cueId, final Timeline timeline) {
+        cues.put(cueId, timeline);
     }
 
     private void registerShowElement() {
@@ -106,7 +121,7 @@ public abstract class ShowElement {
 
     private void analyzeMessage(final SCFJMessage message) {
         if (message.getInstruction() == Instruction.GO) {
-            runShowLoop();
+            runShowLoop(message.getCueId());
         } else if (message.getInstruction() == Instruction.IDLE) {
             runIdleLoop();
         } else if (message.getInstruction() == Instruction.SHUTDOWN) {
@@ -114,10 +129,22 @@ public abstract class ShowElement {
         }
     }
 
-    private void runShowLoop() {
-        log.info("Starting show loop for Show Element={}", this.toString());
+    /**
+     * Runs the cue named by {@code cueId} if one was registered via {@link #registerCue(String, Timeline)},
+     * otherwise falls back to {@link #showSequence()} - so a Show Element that never registers named cues
+     * behaves exactly as before, and a GO naming an unrecognized cue id degrades to the default sequence
+     * rather than doing nothing.
+     */
+    private void runShowLoop(final String cueId) {
+        final Timeline timeline = cueId != null ? cues.get(cueId) : null;
+        log.info("Starting show loop for Show Element={}{}", this.toString(),
+                timeline != null ? " (cue=" + cueId + ")" : "");
         try {
-            showSequence();
+            if (timeline != null) {
+                timeline.play();
+            } else {
+                showSequence();
+            }
             runIdleLoop();
         } catch (final InterruptedException e) {
             log.trace("Thread is complete because a new Show Command was received for Show Element={}", this.toString());

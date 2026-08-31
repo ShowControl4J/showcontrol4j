@@ -87,6 +87,19 @@ public class ShowTriggerTest {
     }
 
     @Test
+    public void testSendGoMessage_withCueId() throws Exception {
+        final ShowTrigger showTrigger = new ShowTrigger(name, id, syncTimeout, mockMessageExchange, mockBrokerConnectionFactory) {
+            @Override
+            protected void startListener() {
+                // do nothing
+            }
+        };
+
+        showTrigger.sendGoMessage("finale");
+        verify(mockBlockingClient.publishWith()).topic("test");
+    }
+
+    @Test
     public void testSendIdleMessage() throws Exception {
         final ShowTrigger showTrigger = new ShowTrigger(name, id, syncTimeout, mockMessageExchange, mockBrokerConnectionFactory) {
             @Override
