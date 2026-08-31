@@ -23,6 +23,12 @@ public class SCFJMessage implements Serializable {
 
   private Instruction instruction;
   private long startTime;
+  /**
+   * Identifies which cue a GO instruction should run. Null means "the default cue" - a Show
+   * Element that never registers named cues just runs its single {@code showSequence()}, so
+   * this is optional and backward compatible with a single-sequence show.
+   */
+  private String cueId;
 
   public byte[] serialize() throws JsonProcessingException {
     return new ObjectMapper().writeValueAsBytes(this);

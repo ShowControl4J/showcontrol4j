@@ -31,6 +31,22 @@ public class ShowCommandTest {
     }
 
     @Test
+    public void testGo_defaultsToNullCueId() {
+        final SCFJMessage testCommand = ShowCommand.GO(null);
+        assertEquals(null, testCommand.getCueId());
+    }
+
+    @Test
+    public void testGo_withCueId() {
+        final long currentTime = System.currentTimeMillis();
+        final SCFJMessage testCommand = ShowCommand.GO(10000L, "finale");
+        assertEquals(Instruction.GO, testCommand.getInstruction());
+        assertEquals("finale", testCommand.getCueId());
+        assertTrue(testCommand.getStartTime() > (currentTime + 10000) - 100);
+        assertTrue(testCommand.getStartTime() < (currentTime + 10000) + 100);
+    }
+
+    @Test
     public void testIdle() {
         final long currentTime = System.currentTimeMillis();
         final SCFJMessage testCommand = ShowCommand.IDLE(10000L);

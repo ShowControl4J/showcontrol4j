@@ -18,6 +18,7 @@ import org.showcontrol4j.exchange.MessageExchange;
 import org.showcontrol4j.message.Instruction;
 import org.showcontrol4j.message.SCFJMessage;
 import org.showcontrol4j.message.ShowCommand;
+import org.showcontrol4j.timeline.Timeline;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -198,6 +199,76 @@ public class ShowElementTest {
         TimeUnit.MILLISECONDS.sleep(1000);
 
         assertEquals(2, showSequenceCounter[0]);
+
+        shutdownExecutorOnShowElementBase(showElement);
+    }
+
+    @Test
+    public void testHandleMessage_goMessageWithRegisteredCue_playsTimeline() throws Exception {
+        setupMockRules();
+        final boolean[] ranShowSequence = {false};
+        final boolean[] ranTimelineAction = {false};
+
+        final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
+            {
+                registerCue("finale", Timeline.builder().at(0L, () -> ranTimelineAction[0] = true).build());
+            }
+
+            @Override
+            public void showSequence() throws InterruptedException {
+                ranShowSequence[0] = true;
+            }
+
+            @Override
+            public void idleLoop() throws InterruptedException {
+                // do nothing
+            }
+
+            @Override
+            public void shutdownProcedure() {
+                // do nothing
+            }
+        };
+
+        showElement.init();
+
+        executor.submit(new TestTask(showElement, ShowCommand.GO(null, "finale")));
+        TimeUnit.MILLISECONDS.sleep(1000);
+
+        assertTrue(ranTimelineAction[0]);
+        assertFalse(ranShowSequence[0]);
+
+        shutdownExecutorOnShowElementBase(showElement);
+    }
+
+    @Test
+    public void testHandleMessage_goMessageWithUnregisteredCueId_fallsBackToShowSequence() throws Exception {
+        setupMockRules();
+        final boolean[] ranShowSequence = {false};
+
+        final ShowElement showElement = new ShowElement(testElementName, testElementId, mockMessageExchange, mockBrokerConnectionFactory) {
+            @Override
+            public void showSequence() throws InterruptedException {
+                ranShowSequence[0] = true;
+            }
+
+            @Override
+            public void idleLoop() throws InterruptedException {
+                // do nothing
+            }
+
+            @Override
+            public void shutdownProcedure() {
+                // do nothing
+            }
+        };
+
+        showElement.init();
+
+        executor.submit(new TestTask(showElement, ShowCommand.GO(null, "unregistered-cue")));
+        TimeUnit.MILLISECONDS.sleep(1000);
+
+        assertTrue(ranShowSequence[0]);
 
         shutdownExecutorOnShowElementBase(showElement);
     }
